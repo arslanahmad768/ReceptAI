@@ -1,0 +1,460 @@
+{
+  "run_meta": {
+    "stage": "find_emails",
+    "model": "llama-3.3-70b-versatile",
+    "clinics": 10,
+    "clinics_with_email": 6
+  },
+  "leads": [
+    {
+      "clinic": {
+        "name": "Dental Walk-In Clinic of Tampa Bay",
+        "address": "4240 W Kennedy Blvd, Tampa, FL 33609, United States",
+        "phone": "+1 813-636-9400",
+        "website": "http://www.dentalwalkin.com/",
+        "google_maps_url": "https://www.google.com/maps/place/Dental+Walk-In+Clinic+of+Tampa+Bay/data=!4m7!3m6!1s0x88c2c30326311557:0xb04999966d7e2366!8m2!3d27.944536!4d-82.515614!16s%2Fg%2F1tcvvn4g!19sChIJVxUxJgPDwogRZiN-bZaZSbA?authuser=0&hl=en&rclk=1",
+        "rating": 4.5,
+        "review_count": null,
+        "reviews_analyzed": 169
+      },
+      "qualification": {
+        "qualification_score": 2,
+        "primary_pain_point": "none",
+        "complaint_quote": null,
+        "complaint_review_url": "https://www.google.com/maps/place/Dental+Walk-In+Clinic+of+Tampa+Bay/data=!4m7!3m6!1s0x88c2c30326311557:0xb04999966d7e2366!8m2!3d27.944536!4d-82.515614!16s%2Fg%2F1tcvvn4g!19sChIJVxUxJgPDwogRZiN-bZaZSbA?authuser=0&hl=en&rclk=1",
+        "complaint_review_ref": null,
+        "personalization_hook": "I saw that your clinic has helped many patients with emergency dental needs, and I'd love to explore how our AI receptionist can further support your team in providing excellent care.",
+        "recommend_outreach": false
+      },
+      "enrichment": {
+        "email": "contactinfo@rola.com",
+        "all_emails": [
+          "contactinfo@rola.com",
+          "support@rola.com"
+        ],
+        "source_page": null,
+        "only_contact_form": false,
+        "doctors_found": [
+          "Dr. Mark Holmes",
+          "Dr. Adiba Khan",
+          "Dr. Daniel Slaybaugh",
+          "Dr. Christine Van"
+        ],
+        "method": "html_direct",
+        "status": "found"
+      }
+    },
+    {
+      "clinic": {
+        "name": "Advanced Dental Care of Tampa",
+        "address": "3922 W Hillsborough Ave, Tampa, FL 33614, United States",
+        "phone": "+1 813-603-5109",
+        "website": "https://www.adc-fl.com/dentist-office/tampa-fl-33614?utm_source=Google&utm_medium=KnowledgePanel&utm_campaign=Website",
+        "google_maps_url": "https://www.google.com/maps/place/Advanced+Dental+Care+of+Tampa/data=!4m7!3m6!1s0x88c2c3d9fff501bd:0x1e3fb37e4a84db26!8m2!3d27.9950712!4d-82.508268!16s%2Fg%2F1tgz682d!19sChIJvQH1_9nDwogRJtuESn6zPx4?authuser=0&hl=en&rclk=1",
+        "rating": 4.7,
+        "review_count": null,
+        "reviews_analyzed": 117
+      },
+      "qualification": {
+        "qualification_score": 2,
+        "primary_pain_point": "none",
+        "complaint_quote": null,
+        "complaint_review_url": "https://www.google.com/maps/place/Advanced+Dental+Care+of+Tampa/data=!4m7!3m6!1s0x88c2c3d9fff501bd:0x1e3fb37e4a84db26!8m2!3d27.9950712!4d-82.508268!16s%2Fg%2F1tgz682d!19sChIJvQH1_9nDwogRJtuESn6zPx4?authuser=0&hl=en&rclk=1",
+        "complaint_review_ref": null,
+        "personalization_hook": "It's great to see that your patients appreciate the friendly and professional service provided by your staff, and we'd love to help you maintain that high level of service with our AI receptionist solution.",
+        "recommend_outreach": false
+      },
+      "enrichment": {
+        "email": null,
+        "all_emails": [
+          "info@adc-fl.com",
+          "office@adc-fl.com",
+          "frontdesk@adc-fl.com",
+          "contact@adc-fl.com",
+          "hello@adc-fl.com",
+          "admin@adc-fl.com",
+          "appointments@adc-fl.com",
+          "scheduling@adc-fl.com"
+        ],
+        "source_page": null,
+        "only_contact_form": false,
+        "doctors_found": [],
+        "method": "error",
+        "status": "not_found"
+      }
+    },
+    {
+      "clinic": {
+        "name": "Jackson Dental",
+        "address": "101 E Kennedy Blvd #300, Tampa, FL 33602, United States",
+        "phone": "+1 813-686-5748",
+        "website": "https://jacksondentaltampa.com/",
+        "google_maps_url": "https://www.google.com/maps/place/Jackson+Dental/data=!4m7!3m6!1s0x88c2c489558a1a0d:0x80821f43aaad6f16!8m2!3d27.946917!4d-82.4590626!16s%2Fg%2F1jkxmm4j5!19sChIJDRqKVYnEwogRFm-tqkMfgoA?authuser=0&hl=en&rclk=1",
+        "rating": 4.9,
+        "review_count": null,
+        "reviews_analyzed": 137
+      },
+      "qualification": {
+        "qualification_score": 2,
+        "primary_pain_point": "none",
+        "complaint_quote": null,
+        "complaint_review_url": "https://www.google.com/maps/place/Jackson+Dental/data=!4m7!3m6!1s0x88c2c489558a1a0d:0x80821f43aaad6f16!8m2!3d27.946917!4d-82.4590626!16s%2Fg%2F1jkxmm4j5!19sChIJDRqKVYnEwogRFm-tqkMfgoA?authuser=0&hl=en&rclk=1",
+        "complaint_review_ref": null,
+        "personalization_hook": "Jackson Dental has received praise for its welcoming and professional staff, making patients feel at ease during their visits.",
+        "recommend_outreach": false
+      },
+      "enrichment": {
+        "email": "info@jacksondentaltampa.com",
+        "all_emails": [
+          "info@jacksondentaltampa.com",
+          "office@jacksondentaltampa.com",
+          "frontdesk@jacksondentaltampa.com",
+          "contact@jacksondentaltampa.com",
+          "hello@jacksondentaltampa.com",
+          "admin@jacksondentaltampa.com",
+          "appointments@jacksondentaltampa.com",
+          "scheduling@jacksondentaltampa.com",
+          "drmeet@jacksondentaltampa.com",
+          "dr.meet@jacksondentaltampa.com",
+          "drjacksonmeet@jacksondentaltampa.com",
+          "dr.jackson.meet@jacksondentaltampa.com",
+          "jmeet@jacksondentaltampa.com",
+          "jackson.meet@jacksondentaltampa.com",
+          "jacksonmeet@jacksondentaltampa.com",
+          "drsheffieldmeet@jacksondentaltampa.com",
+          "dr.sheffield.meet@jacksondentaltampa.com",
+          "smeet@jacksondentaltampa.com",
+          "sheffield.meet@jacksondentaltampa.com",
+          "sheffieldmeet@jacksondentaltampa.com",
+          "drfortiermeet@jacksondentaltampa.com",
+          "dr.fortier.meet@jacksondentaltampa.com",
+          "fmeet@jacksondentaltampa.com",
+          "fortier.meet@jacksondentaltampa.com",
+          "fortiermeet@jacksondentaltampa.com",
+          "drfinstermeet@jacksondentaltampa.com",
+          "dr.finster.meet@jacksondentaltampa.com",
+          "finster.meet@jacksondentaltampa.com",
+          "finstermeet@jacksondentaltampa.com"
+        ],
+        "source_page": null,
+        "only_contact_form": false,
+        "doctors_found": [
+          "Dr. Jackson Meet",
+          "Dr. Sheffield Meet",
+          "Dr. Fortier Meet",
+          "Dr. Finster Meet"
+        ],
+        "method": "port25_blocked_guess",
+        "status": "found"
+      }
+    },
+    {
+      "clinic": {
+        "name": "South Tampa Dentistry",
+        "address": "3308 S Dale Mabry Hwy, Tampa, FL 33629, United States",
+        "phone": "+1 813-835-0090",
+        "website": "https://southtampadentistry.com/",
+        "google_maps_url": "https://www.google.com/maps/place/South+Tampa+Dentistry/data=!4m7!3m6!1s0x88c2c33190060703:0x56040e2a9988211a!8m2!3d27.915108!4d-82.5056829!16s%2Fg%2F1tf2yl76!19sChIJAwcGkDHDwogRGiGImSoOBFY?authuser=0&hl=en&rclk=1",
+        "rating": 4.9,
+        "review_count": null,
+        "reviews_analyzed": 302
+      },
+      "qualification": {
+        "qualification_score": 2,
+        "primary_pain_point": "none",
+        "complaint_quote": null,
+        "complaint_review_url": "https://www.google.com/maps/place/South+Tampa+Dentistry/data=!4m7!3m6!1s0x88c2c33190060703:0x56040e2a9988211a!8m2!3d27.915108!4d-82.5056829!16s%2Fg%2F1tf2yl76!19sChIJAwcGkDHDwogRGiGImSoOBFY?authuser=0&hl=en&rclk=1",
+        "complaint_review_ref": null,
+        "personalization_hook": "I saw that many of your patients have praised your friendly and efficient staff, and I'd love to explore how our AI receptionist can help enhance that experience.",
+        "recommend_outreach": false
+      },
+      "enrichment": {
+        "email": null,
+        "all_emails": [
+          "info@southtampadentistry.com",
+          "office@southtampadentistry.com",
+          "frontdesk@southtampadentistry.com",
+          "contact@southtampadentistry.com",
+          "hello@southtampadentistry.com",
+          "admin@southtampadentistry.com",
+          "appointments@southtampadentistry.com",
+          "scheduling@southtampadentistry.com"
+        ],
+        "source_page": null,
+        "only_contact_form": false,
+        "doctors_found": [],
+        "method": "error",
+        "status": "not_found"
+      }
+    },
+    {
+      "clinic": {
+        "name": "Great Expressions Dental Centers - Downtown",
+        "address": "114 N 12th St, Tampa, FL 33602, United States",
+        "phone": "+1 813-257-9475",
+        "website": "https://www.greatexpressions.com/dental-offices/dentist-in-tampa-florida-n-12th-st/",
+        "google_maps_url": "https://www.google.com/maps/place/Great+Expressions+Dental+Centers+-+Downtown/data=!4m7!3m6!1s0x88c2c461fe1b0d83:0x807067110789bf6c!8m2!3d27.9477656!4d-82.4468489!16s%2Fg%2F1tc_096y!19sChIJgw0b_mHEwogRbL-JBxFncIA?authuser=0&hl=en&rclk=1",
+        "rating": 4.4,
+        "review_count": null,
+        "reviews_analyzed": 76
+      },
+      "qualification": {
+        "qualification_score": 4,
+        "primary_pain_point": "slow_response",
+        "complaint_quote": "on hold for over 20 minutes",
+        "complaint_review_url": "https://www.google.com/maps/place/Great+Expressions+Dental+Centers+-+Downtown/data=!4m7!3m6!1s0x88c2c461fe1b0d83:0x807067110789bf6c!8m2!3d27.9477656!4d-82.4468489!16s%2Fg%2F1tc_096y!19sChIJgw0b_mHEwogRbL-JBxFncIA?authuser=0&hl=en&rclk=1",
+        "complaint_review_ref": {
+          "author": "Anjie Smith",
+          "date": "2025-09-12",
+          "review_id": "Ci9DQUlRQUNvZENodHljRjlvT25CdVMwcHhWVUZRZUV0VWFuQktlWEJ4T0hKelJrRRAB"
+        },
+        "personalization_hook": "We noticed that some of your patients have experienced long wait times on the phone, and we'd like to help you improve your patient experience.",
+        "recommend_outreach": false
+      },
+      "enrichment": {
+        "email": null,
+        "all_emails": [
+          "info@greatexpressions.com",
+          "office@greatexpressions.com",
+          "frontdesk@greatexpressions.com",
+          "contact@greatexpressions.com",
+          "hello@greatexpressions.com",
+          "admin@greatexpressions.com",
+          "appointments@greatexpressions.com",
+          "scheduling@greatexpressions.com"
+        ],
+        "source_page": null,
+        "only_contact_form": false,
+        "doctors_found": [],
+        "method": "error",
+        "status": "not_found"
+      }
+    },
+    {
+      "clinic": {
+        "name": "Tampa Dentistry",
+        "address": "1311 W Busch Blvd, Tampa, FL 33612, United States",
+        "phone": "+1 813-333-0633",
+        "website": "https://mytampadentistry.com/",
+        "google_maps_url": "https://www.google.com/maps/place/Tampa+Dentistry/data=!4m7!3m6!1s0x88c2c6cda03f95ef:0xf97d663c775f91a7!8m2!3d28.0337661!4d-82.4724821!16s%2Fg%2F11ckvvj8tz!19sChIJ75U_oM3GwogRp5Ffdzxmffk?authuser=0&hl=en&rclk=1",
+        "rating": 4.9,
+        "review_count": null,
+        "reviews_analyzed": 50
+      },
+      "qualification": {
+        "qualification_score": 8,
+        "primary_pain_point": "slow_response",
+        "complaint_quote": "but they never got back",
+        "complaint_review_url": "https://www.google.com/maps/place/Tampa+Dentistry/data=!4m7!3m6!1s0x88c2c6cda03f95ef:0xf97d663c775f91a7!8m2!3d28.0337661!4d-82.4724821!16s%2Fg%2F11ckvvj8tz!19sChIJ75U_oM3GwogRp5Ffdzxmffk?authuser=0&hl=en&rclk=1",
+        "complaint_review_ref": {
+          "author": "5Maniacs",
+          "date": "2026-02-09",
+          "review_id": "Ci9DQUlRQUNvZENodHljRjlvT2xOakxYWXRVWGxWU1ZabE1ERmlabWxHTWtJeGNrRRAB"
+        },
+        "personalization_hook": "I saw that one of your patients had a poor experience with follow-up calls, and I'd like to show you how our AI receptionist can help prevent that in the future.",
+        "recommend_outreach": true
+      },
+      "enrichment": {
+        "email": null,
+        "all_emails": [
+          "info@mytampadentistry.com",
+          "office@mytampadentistry.com",
+          "frontdesk@mytampadentistry.com",
+          "contact@mytampadentistry.com",
+          "hello@mytampadentistry.com",
+          "admin@mytampadentistry.com",
+          "appointments@mytampadentistry.com",
+          "scheduling@mytampadentistry.com"
+        ],
+        "source_page": null,
+        "only_contact_form": false,
+        "doctors_found": [],
+        "method": "error",
+        "status": "not_found"
+      }
+    },
+    {
+      "clinic": {
+        "name": "Playa Family Dentistry Tampa",
+        "address": "4340 W Hillsborough Ave Ste 702, Tampa, FL 33614, United States",
+        "phone": "+1 813-553-5590",
+        "website": "https://www.playafamilydentistry.com/?UTM_source=GMB_listing&UTM_medium=organic&UTM_campaign=Website_URL",
+        "google_maps_url": "https://www.google.com/maps/place/Playa+Family+Dentistry+Tampa/data=!4m7!3m6!1s0x88c2c321dd497abd:0xa30c7b5bb882201c!8m2!3d27.9955978!4d-82.5159835!16s%2Fg%2F11fnyg20__!19sChIJvXpJ3SHDwogRHCCCuFt7DKM?authuser=0&hl=en&rclk=1",
+        "rating": 4.9,
+        "review_count": null,
+        "reviews_analyzed": 186
+      },
+      "qualification": {
+        "qualification_score": 0,
+        "primary_pain_point": "none",
+        "complaint_quote": null,
+        "complaint_review_url": "https://www.google.com/maps/place/Playa+Family+Dentistry+Tampa/data=!4m7!3m6!1s0x88c2c321dd497abd:0xa30c7b5bb882201c!8m2!3d27.9955978!4d-82.5159835!16s%2Fg%2F11fnyg20__!19sChIJvXpJ3SHDwogRHCCCuFt7DKM?authuser=0&hl=en&rclk=1",
+        "complaint_review_ref": null,
+        "personalization_hook": "It's great to see that your patients appreciate the friendly and professional service provided by your team at Playa Family Dentistry Tampa.",
+        "recommend_outreach": false
+      },
+      "enrichment": {
+        "email": "playafamilydentistry@gmail.com",
+        "all_emails": [
+          "playafamilydentistry@gmail.com"
+        ],
+        "source_page": null,
+        "only_contact_form": false,
+        "doctors_found": [
+          "Dr. Keith Simon"
+        ],
+        "method": "html_direct",
+        "status": "found"
+      }
+    },
+    {
+      "clinic": {
+        "name": "Tomlinson Dental",
+        "address": "3907 N Blvd, Tampa, FL 33603, United States",
+        "phone": "+1 813-209-0338",
+        "website": "https://www.tomlinsondentalcare.com/",
+        "google_maps_url": "https://www.google.com/maps/place/Tomlinson+Dental/data=!4m7!3m6!1s0x88c2c40c49aef343:0xde3059f06bc33e2e!8m2!3d27.980208!4d-82.467364!16s%2Fg%2F1v_w33yw!19sChIJQ_OuSQzEwogRLj7Da_BZMN4?authuser=0&hl=en&rclk=1",
+        "rating": 4.9,
+        "review_count": null,
+        "reviews_analyzed": 237
+      },
+      "qualification": {
+        "qualification_score": 2,
+        "primary_pain_point": "none",
+        "complaint_quote": null,
+        "complaint_review_url": "https://www.google.com/maps/place/Tomlinson+Dental/data=!4m7!3m6!1s0x88c2c40c49aef343:0xde3059f06bc33e2e!8m2!3d27.980208!4d-82.467364!16s%2Fg%2F1v_w33yw!19sChIJQ_OuSQzEwogRLj7Da_BZMN4?authuser=0&hl=en&rclk=1",
+        "complaint_review_ref": null,
+        "personalization_hook": "It's great to see that Tomlinson Dental has been providing excellent care to patients like you for over 26 years, with many reviewers praising the friendly and professional staff.",
+        "recommend_outreach": false
+      },
+      "enrichment": {
+        "email": "info@tomlinsondentalcare.com",
+        "all_emails": [
+          "info@tomlinsondentalcare.com",
+          "office@tomlinsondentalcare.com",
+          "frontdesk@tomlinsondentalcare.com",
+          "contact@tomlinsondentalcare.com",
+          "hello@tomlinsondentalcare.com",
+          "admin@tomlinsondentalcare.com",
+          "appointments@tomlinsondentalcare.com",
+          "scheduling@tomlinsondentalcare.com",
+          "drtomlinson@tomlinsondentalcare.com",
+          "dr.tomlinson@tomlinsondentalcare.com",
+          "drangellatomlinson@tomlinsondentalcare.com",
+          "dr.angella.tomlinson@tomlinsondentalcare.com",
+          "atomlinson@tomlinsondentalcare.com",
+          "angella.tomlinson@tomlinsondentalcare.com",
+          "angellatomlinson@tomlinsondentalcare.com",
+          "drlorrainetomlinson@tomlinsondentalcare.com",
+          "dr.lorraine.tomlinson@tomlinsondentalcare.com",
+          "ltomlinson@tomlinsondentalcare.com",
+          "lorraine.tomlinson@tomlinsondentalcare.com",
+          "lorrainetomlinson@tomlinsondentalcare.com"
+        ],
+        "source_page": null,
+        "only_contact_form": false,
+        "doctors_found": [
+          "Dr. Angella Tomlinson",
+          "Dr. Lorraine Tomlinson"
+        ],
+        "method": "port25_blocked_guess",
+        "status": "found"
+      }
+    },
+    {
+      "clinic": {
+        "name": "Modern Dental Care",
+        "address": "4144 N Armenia Ave #260, Tampa, FL 33607, United States",
+        "phone": "+1 813-870-0480",
+        "website": "https://www.smilesonarmenia.com/",
+        "google_maps_url": "https://www.google.com/maps/place/Modern+Dental+Care/data=!4m7!3m6!1s0x88c2c38d4d307f47:0x82786a7589fffaad!8m2!3d27.9771742!4d-82.4851319!16s%2Fg%2F11xb5pjfd!19sChIJR38wTY3DwogRrfr_iXVqeII?authuser=0&hl=en&rclk=1",
+        "rating": 4.8,
+        "review_count": null,
+        "reviews_analyzed": 18
+      },
+      "qualification": {
+        "qualification_score": 0,
+        "primary_pain_point": "none",
+        "complaint_quote": null,
+        "complaint_review_url": "https://www.google.com/maps/place/Modern+Dental+Care/data=!4m7!3m6!1s0x88c2c38d4d307f47:0x82786a7589fffaad!8m2!3d27.9771742!4d-82.4851319!16s%2Fg%2F11xb5pjfd!19sChIJR38wTY3DwogRrfr_iXVqeII?authuser=0&hl=en&rclk=1",
+        "complaint_review_ref": null,
+        "personalization_hook": "It's great to see that your team at Modern Dental Care has been providing excellent care and making patients feel comfortable and valued.",
+        "recommend_outreach": false
+      },
+      "enrichment": {
+        "email": "admin@smilesonarmenia.com",
+        "all_emails": [
+          "info@smilesonarmenia.com",
+          "office@smilesonarmenia.com",
+          "frontdesk@smilesonarmenia.com",
+          "contact@smilesonarmenia.com",
+          "hello@smilesonarmenia.com",
+          "admin@smilesonarmenia.com",
+          "appointments@smilesonarmenia.com",
+          "scheduling@smilesonarmenia.com",
+          "drcampbell@smilesonarmenia.com",
+          "dr.campbell@smilesonarmenia.com",
+          "drmitracampbell@smilesonarmenia.com",
+          "dr.mitra.campbell@smilesonarmenia.com",
+          "mcampbell@smilesonarmenia.com",
+          "mitra.campbell@smilesonarmenia.com",
+          "mitracampbell@smilesonarmenia.com",
+          "drngo@smilesonarmenia.com",
+          "dr.ngo@smilesonarmenia.com",
+          "drlyngo@smilesonarmenia.com",
+          "dr.ly.ngo@smilesonarmenia.com",
+          "lngo@smilesonarmenia.com",
+          "ly.ngo@smilesonarmenia.com",
+          "lyngo@smilesonarmenia.com"
+        ],
+        "source_page": null,
+        "only_contact_form": false,
+        "doctors_found": [
+          "Dr. Mitra Campbell",
+          "Dr. Ly Ngo"
+        ],
+        "method": "smtp_verified",
+        "status": "found"
+      }
+    },
+    {
+      "clinic": {
+        "name": "Tampa Dental",
+        "address": "6421 Sheldon Rd, Tampa, FL 33615, United States",
+        "phone": "+1 813-888-9004",
+        "website": "https://www.tampadental.com/",
+        "google_maps_url": "https://www.google.com/maps/place/Tampa+Dental/data=!4m7!3m6!1s0x88c2ea1f90db68fd:0x198b3ad2f199b90a!8m2!3d28.0083928!4d-82.582789!16s%2Fg%2F1tfk56rd!19sChIJ_WjbkB_qwogRCrmZ8dI6ixk?authuser=0&hl=en&rclk=1",
+        "rating": 4.9,
+        "review_count": null,
+        "reviews_analyzed": 205
+      },
+      "qualification": {
+        "qualification_score": 0,
+        "primary_pain_point": "none",
+        "complaint_quote": null,
+        "complaint_review_url": "https://www.google.com/maps/place/Tampa+Dental/data=!4m7!3m6!1s0x88c2ea1f90db68fd:0x198b3ad2f199b90a!8m2!3d28.0083928!4d-82.582789!16s%2Fg%2F1tfk56rd!19sChIJ_WjbkB_qwogRCrmZ8dI6ixk?authuser=0&hl=en&rclk=1",
+        "complaint_review_ref": null,
+        "personalization_hook": "It's great to see that your patients appreciate the professional and welcoming atmosphere at Tampa Dental, and we'd love to help you maintain that high level of service with our AI receptionist solutions.",
+        "recommend_outreach": false
+      },
+      "enrichment": {
+        "email": "info@tampadental.com",
+        "all_emails": [
+          "info@tampadental.com",
+          "office@tampadental.com",
+          "frontdesk@tampadental.com",
+          "contact@tampadental.com",
+          "hello@tampadental.com",
+          "admin@tampadental.com",
+          "appointments@tampadental.com",
+          "scheduling@tampadental.com"
+        ],
+        "source_page": null,
+        "only_contact_form": false,
+        "doctors_found": [],
+        "method": "smtp_verified",
+        "status": "found"
+      }
+    }
+  ]
+}
