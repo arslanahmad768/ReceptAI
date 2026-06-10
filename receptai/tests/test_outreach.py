@@ -68,3 +68,120 @@ def test_send_email_returns_send_result():
     assert isinstance(result, SendResult)
     assert result.message_id == "re_test_123"
     assert result.success is True
+
+
+# ---------------------------------------------------------------------------
+# Integration test — campaign creation and email listing
+# ---------------------------------------------------------------------------
+
+async def test_create_campaign_and_get_emails():
+    from httpx import AsyncClient, ASGITransport
+    from app.main import app
+
+    # ── In-memory stores ────────────────────────────────────────────────────
+    profiles = {}
+    niches_store = {"dental": {"id": "niche-dental-id", "slug": "dental"}}
+    campaigns_store = {}
+    outreach_emails_store = {}
+
+    def make_mock_db():
+        mock_db = MagicMock()
+
+        def table(name):
+            t = MagicMock()
+
+            def select(*args):
+                s = MagicMock()
+
+                def eq(col, val):
+                    e = MagicMock()
+
+                    def execute():
+                        r = MagicMock()
+                        if name == "profiles":
+                            r.data = [p for p in profiles.values() if p.get(col) == val]
+                        elif name == "niches":
+                            r.data = [v for v in niches_store.values() if v.get(col) == val]
+                        elif name == "campaigns":
+                            r.data = [c for c in campaigns_store.values() if c.get(col) == val]
+                        elif name == "outreach_emails":
+                            r.data = [
+                                em for em in outreach_emails_store.values()
+                                if em.get(col) == val
+                            ]
+                        else:
+                            r.data = []
+                        return r
+
+                    e.execute = execute
+                    # support chained .eq().eq() — second call is a no-op
+                    e.eq = lambda c2, v2: e
+                    return e
+
+                s.eq = eq
+                return s
+
+            def insert(row):
+                i = MagicMock()
+
+                def execute():
+                    if name == "profiles":
+                        profiles[row["id"]] = row
+                    elif name == "campaigns":
+                        campaigns_store[row["id"]] = row
+                    elif name == "outreach_emails":
+                        outreach_emails_store[row["id"]] = row
+                    r = MagicMock()
+                    r.data = [row]
+                    return r
+
+                i.execute = execute
+                return i
+
+            t.select = select
+            t.insert = insert
+            t.update = MagicMock(
+                return_value=MagicMock(
+                    eq=MagicMock(
+                        return_value=MagicMock(execute=MagicMock())
+                    )
+                )
+            )
+            return t
+
+        mock_db.table = table
+        return mock_db
+
+    db_instance = make_mock_db()
+
+    with patch("app.auth.service.get_db", return_value=db_instance), \
+         patch("app.outreach.repository.get_db", return_value=db_instance), \
+         patch("app.outreach.router.get_db", return_value=db_instance):
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
+            # Register + login
+            await c.post(
+                "/auth/register",
+                json={"email": "camp@test.com", "password": "Pass123!"},
+            )
+            r = await c.post(
+                "/auth/token",
+                data={"username": "camp@test.com", "password": "Pass123!"},
+            )
+            token = r.json()["access_token"]
+            c.headers["Authorization"] = f"Bearer {token}"
+
+            # Create campaign
+            r = await c.post(
+                "/outreach/campaigns",
+                json={"name": "June Dental Blast", "niche": "dental"},
+            )
+            assert r.status_code == 201, f"Expected 201, got {r.status_code}: {r.text}"
+            campaign_id = r.json()["id"]
+
+            # List emails (should be empty)
+            r = await c.get(f"/outreach/campaigns/{campaign_id}/emails")
+            assert r.status_code == 200
+            assert r.json() == []
