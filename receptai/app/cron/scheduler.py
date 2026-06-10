@@ -15,12 +15,17 @@ def get_scheduler() -> BackgroundScheduler:
 
 
 def start_scheduler() -> None:
-    from app.cron.repository import list_active_cron_jobs
-
+    import logging
     scheduler = get_scheduler()
-    jobs = list_active_cron_jobs()
-    for job in jobs:
-        _register_job(scheduler, job["id"], job["cron_expr"])
+    try:
+        from app.cron.repository import list_active_cron_jobs
+        jobs = list_active_cron_jobs()
+        for job in jobs:
+            _register_job(scheduler, job["id"], job["cron_expr"])
+    except Exception as exc:
+        logging.getLogger(__name__).error(
+            "Could not load cron jobs from DB at startup: %s", exc
+        )
     if not scheduler.running:
         scheduler.start()
 

@@ -11,11 +11,10 @@ os.environ.setdefault("RESEND_API_KEY", "re_test_key")
 os.environ.setdefault("FROM_EMAIL", "test@receptai.com")
 
 
-@pytest.fixture(autouse=True, scope="session")
+@pytest.fixture(autouse=True)
 def patch_database_get_db():
     """Patch app.database.get_db so the lifespan health check doesn't call real Supabase."""
     mock_db = MagicMock()
-    # Make .table("niches").select("id").limit(1).execute() return successfully
     mock_db.table.return_value.select.return_value.limit.return_value.execute.return_value = MagicMock(data=[{"id": "niche-id"}])
     with mock_patch("app.database.get_db", return_value=mock_db):
         yield mock_db

@@ -7,6 +7,15 @@ import app.cron.router  # noqa: F401
 import app.cron.repository  # noqa: F401
 
 
+@pytest.fixture(autouse=True)
+def reset_scheduler():
+    import app.cron.scheduler as sched_mod
+    yield
+    if sched_mod._scheduler is not None and sched_mod._scheduler.running:
+        sched_mod._scheduler.shutdown(wait=False)
+    sched_mod._scheduler = None
+
+
 def _make_cron_mock_db():
     profiles = {}
     niches_store = {"dental": {"id": "niche-dental-id", "slug": "dental"}}

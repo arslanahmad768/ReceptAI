@@ -52,8 +52,14 @@ def mark_email_sent(email_id: str, message_id: str) -> None:
 def mark_email_failed(email_id: str, error: str) -> None:
     db = get_db()
     db.table("outreach_emails").update(
-        {"status": "failed", "resend_message_id": error}
+        {"status": "failed", "send_error": error}
     ).eq("id", email_id).execute()
+
+
+def get_campaign(campaign_id: str) -> dict | None:
+    db = get_db()
+    r = db.table("campaigns").select("*").eq("id", campaign_id).execute()
+    return r.data[0] if r.data else None
 
 
 def list_campaign_emails(campaign_id: str) -> list[dict]:
