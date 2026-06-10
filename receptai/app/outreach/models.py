@@ -12,10 +12,5 @@ class CampaignCreate(BaseModel):
 
 
 class BulkGenerateRequest(BaseModel):
-    campaign_id: str
     lead_ids: list[str]
     niche: str = "dental"
-
-
-class SendCampaignRequest(BaseModel):
-    campaign_id: str

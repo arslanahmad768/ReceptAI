@@ -37,21 +37,24 @@ def generate_drafts_for_campaign(
     results = []
     for lead_id in lead_ids:
         lead_row = get_lead(lead_id)
-        if not lead_row or not lead_row.get("email"):
+        if not lead_row or not lead_row.get("email") or not lead_row.get("clinic_id"):
             results.append({"lead_id": lead_id, "status": "skipped_no_email"})
             continue
-        lead_shape = build_lead_shape(lead_row)
-        email = generate_cold_email(lead_shape, niche_cfg)
-        draft = add_draft_email(
-            campaign_id,
-            lead_id,
-            lead_row["email"],
-            email["subject"],
-            email["body"],
-        )
-        results.append(
-            {"lead_id": lead_id, "draft_id": draft["id"], "status": "draft_created"}
-        )
+        try:
+            lead_shape = build_lead_shape(lead_row)
+            email = generate_cold_email(lead_shape, niche_cfg)
+            draft = add_draft_email(
+                campaign_id,
+                lead_id,
+                lead_row["email"],
+                email["subject"],
+                email["body"],
+            )
+            results.append(
+                {"lead_id": lead_id, "draft_id": draft["id"], "status": "draft_created"}
+            )
+        except Exception as e:
+            results.append({"lead_id": lead_id, "status": "failed", "error": str(e)})
     return results
 
 
@@ -81,9 +84,9 @@ def send_campaign_emails(campaign_id: str) -> dict:
             mark_email_failed(draft["id"], result.error or "unknown")
             failed += 1
 
-    if drafts:
+    if drafts and sent > 0:
         db.table("campaigns").update(
-            {"status": "active" if sent > 0 else "draft"}
+            {"status": "active"}
         ).eq("id", campaign_id).execute()
 
     return {"sent": sent, "failed": failed, "total": len(drafts)}

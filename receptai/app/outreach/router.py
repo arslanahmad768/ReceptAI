@@ -1,6 +1,8 @@
+import base64
 import hmac
 import hashlib
 import json
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, Header
 from typing import Optional
 from app.auth.dependencies import get_current_user
@@ -23,6 +25,7 @@ from app.outreach.repository import (
     list_campaigns,
     list_campaign_emails,
     get_email_by_resend_id,
+    get_campaign,
 )
 from app.core.rate_limit import limiter
 from app.config import settings
@@ -56,6 +59,8 @@ async def generate_email_preview(
         raise HTTPException(404, "Lead not found")
     if not lead_row.get("email"):
         raise HTTPException(422, "Lead has no email — cannot generate outreach")
+    if not lead_row.get("clinic_id"):
+        raise HTTPException(status_code=422, detail="Lead has no clinic — cannot generate outreach")
     result = generate_cold_email(build_lead_shape(lead_row), niche_cfg)
     return {"lead_id": body.lead_id, "to_email": lead_row["email"], **result}
 
@@ -75,10 +80,10 @@ async def get_campaigns(user: dict = Depends(get_current_user)):
 
 
 @router.get("/campaigns/{campaign_id}/emails")
-async def get_campaign_emails(
-    campaign_id: str,
-    user: dict = Depends(get_current_user),
-):
+async def get_campaign_emails(campaign_id: str, user: dict = Depends(get_current_user)):
+    campaign = get_campaign(campaign_id)
+    if not campaign or campaign.get("created_by") != user["sub"]:
+        raise HTTPException(status_code=404, detail="Campaign not found")
     return list_campaign_emails(campaign_id)
 
 
@@ -91,6 +96,9 @@ async def bulk_generate_drafts(
     user: dict = Depends(get_current_user),
 ):
     """Generate personalised draft emails for multiple leads at once."""
+    campaign = get_campaign(campaign_id)
+    if not campaign or campaign.get("created_by") != user["sub"]:
+        raise HTTPException(status_code=404, detail="Campaign not found")
     _, niche_cfg = _resolve_niche(body.niche)
     results = generate_drafts_for_campaign(campaign_id, body.lead_ids, niche_cfg)
     return {"campaign_id": campaign_id, "results": results}
@@ -104,6 +112,9 @@ async def send_campaign(
     user: dict = Depends(get_current_user),
 ):
     """Send all draft emails in a campaign via Resend."""
+    campaign = get_campaign(campaign_id)
+    if not campaign or campaign.get("created_by") != user["sub"]:
+        raise HTTPException(status_code=404, detail="Campaign not found")
     return send_campaign_emails(campaign_id)
 
 
@@ -120,15 +131,20 @@ async def resend_webhook(
     body_bytes = await request.body()
 
     webhook_secret = getattr(settings, "resend_webhook_secret", "")
-    if webhook_secret and svix_signature:
-        to_sign = f"{svix_id}.{svix_timestamp}.{body_bytes.decode()}"
-        expected = hmac.new(
-            webhook_secret.encode(), to_sign.encode(), hashlib.sha256
-        ).hexdigest()
-        if not hmac.compare_digest(
-            expected, svix_signature.split(",")[-1].split("=")[-1]
-        ):
-            raise HTTPException(401, "Invalid webhook signature")
+    if not webhook_secret:
+        raise HTTPException(status_code=500, detail="Webhook secret not configured")
+    if not svix_signature:
+        raise HTTPException(status_code=401, detail="Missing webhook signature")
+    # always verify when we reach here
+    to_sign = f"{svix_id}.{svix_timestamp}.{body_bytes.decode()}"
+    sig_b64 = svix_signature.split(",")[-1].split("=", 1)[-1]
+    expected_bytes = hmac.new(webhook_secret.encode(), to_sign.encode(), hashlib.sha256).digest()
+    try:
+        received_bytes = base64.b64decode(sig_b64)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Malformed signature")
+    if not hmac.compare_digest(expected_bytes, received_bytes):
+        raise HTTPException(status_code=401, detail="Invalid webhook signature")
 
     event = json.loads(body_bytes)
     event_type = event.get("type", "")
@@ -142,7 +158,7 @@ async def resend_webhook(
 
     db = get_db()
     if event_type == "email.opened":
-        db.table("outreach_emails").update({"opened_at": "now()"}).eq(
+        db.table("outreach_emails").update({"opened_at": datetime.now(timezone.utc).isoformat()}).eq(
             "resend_message_id", message_id
         ).execute()
     elif event_type in ("email.bounced", "email.complained"):

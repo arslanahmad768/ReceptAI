@@ -37,5 +37,12 @@ def fire_scrape_job(cron_job_id: str) -> None:
         limit=cron["limit_count"],
     )
 
-    asyncio.run(run_pipeline(job_id, niche_cfg))
-    update_last_run(cron_job_id)
+    try:
+        asyncio.run(run_pipeline(job_id, niche_cfg))
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).error("Pipeline failed for cron job %s: %s", cron_job_id, exc)
+        db.table("scrape_jobs").update({"status": "failed"}).eq("id", job_id).execute()
+        raise
+    finally:
+        update_last_run(cron_job_id)

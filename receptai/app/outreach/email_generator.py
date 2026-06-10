@@ -7,9 +7,13 @@ Demo links are injected from settings so every email includes the live demo CTA.
 """
 import json
 import re
+from functools import lru_cache
 from openai import OpenAI
 from app.config import settings
 from app.niches.base import NicheConfig
+
+_LLM_MODEL = "llama-3.3-70b-versatile"
+_LLM_TEMPERATURE = 0.75
 
 # ── Prompt template ───────────────────────────────────────────────────────────
 
@@ -50,11 +54,16 @@ def _render_template_vars(text: str, variables: dict) -> str:
 
 # ── LLM call (isolated so tests can mock it) ─────────────────────────────────
 
+@lru_cache(maxsize=1)
+def _get_llm_client() -> OpenAI:
+    return OpenAI(api_key=settings.groq_api_key, base_url="https://api.groq.com/openai/v1")
+
+
 def _call_llm(prompt: str, system_prompt: str) -> str:
-    client = OpenAI(api_key=settings.groq_api_key, base_url="https://api.groq.com/openai/v1")
+    client = _get_llm_client()
     resp = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        temperature=0.75,
+        model=_LLM_MODEL,
+        temperature=_LLM_TEMPERATURE,
         response_format={"type": "json_object"},
         messages=[
             {"role": "system", "content": system_prompt},
@@ -98,6 +107,9 @@ def generate_cold_email(lead: dict, niche_cfg: NicheConfig) -> dict:
     except json.JSONDecodeError:
         m = re.search(r"\{.*\}", raw, re.S)
         result = json.loads(m.group(0)) if m else {"subject": "", "body": raw}
+
+    if not result.get("subject") and not result.get("body"):
+        raise ValueError(f"LLM returned unexpected JSON structure: {list(result.keys())}")
 
     # Replace any remaining {{placeholders}} the LLM left in the output
     template_vars = {

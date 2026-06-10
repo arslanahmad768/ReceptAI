@@ -7,9 +7,10 @@ from app.cron.repository import (
     delete_cron_job, toggle_cron_job
 )
 from app.cron.scheduler import register_cron_job, unregister_cron_job
+from app.cron.jobs import NICHE_MAP
 
 router = APIRouter(prefix="/cron", tags=["cron"])
-VALID_NICHES = {"dental"}
+VALID_NICHES = set(NICHE_MAP.keys())
 
 
 @router.post("/jobs", status_code=201)
@@ -33,7 +34,10 @@ async def create_job(body: CronJobCreate, user: dict = Depends(get_current_user)
         cron_expr=body.cron_expr,
         user_id=user["sub"],
     )
-    register_cron_job(job["id"], body.cron_expr)
+    try:
+        register_cron_job(job["id"], body.cron_expr)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     return job
 
 
@@ -47,6 +51,8 @@ async def get_job(job_id: str, user: dict = Depends(get_current_user)):
     job = get_cron_job(job_id)
     if not job:
         raise HTTPException(404, "Cron job not found")
+    if job["created_by"] != user["sub"]:
+        raise HTTPException(403, "Forbidden")
     return job
 
 
@@ -55,6 +61,8 @@ async def toggle_job(job_id: str, user: dict = Depends(get_current_user)):
     job = get_cron_job(job_id)
     if not job:
         raise HTTPException(404, "Cron job not found")
+    if job["created_by"] != user["sub"]:
+        raise HTTPException(403, "Forbidden")
     updated = toggle_cron_job(job_id, not job["is_active"])
     if updated["is_active"]:
         register_cron_job(job_id, job["cron_expr"])
@@ -65,7 +73,11 @@ async def toggle_job(job_id: str, user: dict = Depends(get_current_user)):
 
 @router.delete("/jobs/{job_id}", status_code=204)
 async def delete_job(job_id: str, user: dict = Depends(get_current_user)):
-    if not delete_cron_job(job_id):
+    job = get_cron_job(job_id)
+    if not job:
         raise HTTPException(404, "Cron job not found")
+    if job["created_by"] != user["sub"]:
+        raise HTTPException(403, "Forbidden")
+    delete_cron_job(job_id)
     unregister_cron_job(job_id)
     return Response(status_code=204)

@@ -6,19 +6,18 @@ from app.scraper.router import router as scraper_router
 from app.leads.router import router as leads_router
 from app.outreach.router import router as outreach_router
 from app.cron.router import router as cron_router
+from app.database import get_db
+from app.cron.scheduler import start_scheduler, stop_scheduler
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # ── Startup ───────────────────────────────────────────────────────────────
-    import sys
-    from app.database import get_db
-    from app.cron.scheduler import start_scheduler, stop_scheduler
+    # DB check first: if Supabase is unreachable, there is no point starting the scheduler
     try:
         get_db().table("niches").select("id").limit(1).execute()
     except Exception as e:
-        print(f"FATAL: Supabase unreachable — {e}", file=sys.stderr)
-        sys.exit(1)
+        raise RuntimeError(f"FATAL: Supabase unreachable — {e}") from e
     start_scheduler()
     yield
     # ── Shutdown ──────────────────────────────────────────────────────────────
