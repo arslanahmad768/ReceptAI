@@ -1,4 +1,6 @@
 from functools import lru_cache
+from typing import Optional
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -24,17 +26,24 @@ class Settings(BaseSettings):
     from_name: str = "ReceptAI Outreach"
 
     # Voice agent demo links (injected into cold emails)
-    demo_phone: str = ""
-    demo_url: str = ""
-    booking_url: str = ""
+    demo_phone: str | None = None
+    demo_url: str | None = None
+    booking_url: str | None = None
 
     # Optional
-    apollo_api_key: str = ""
+    apollo_api_key: str | None = None
     allowed_origins: str = "http://localhost:3000"
+
+    @field_validator("secret_key")
+    @classmethod
+    def secret_key_min_length(cls, v: str) -> str:
+        if len(v) < 32:
+            raise ValueError("SECRET_KEY must be at least 32 characters")
+        return v
 
     @property
     def origins_list(self) -> list[str]:
-        return [o.strip() for o in self.allowed_origins.split(",")]
+        return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
 
 
 @lru_cache(maxsize=1)
