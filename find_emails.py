@@ -1,29 +1,32 @@
 ﻿"""
-STAGE 3 — Four-step email finder.
+STAGE 3 — Five-step email finder.
 
-Step 0  quick_scrape()
-          Fetches homepage + About/Team/Contact sub-pages with requests.
-          Extracts: mailto: links, plain-text emails, doctor names (Dr. X Y / X Y DDS|DMD).
-          Fast: 2-5 seconds per clinic, no browser.
+Step 0    quick_scrape()
+            Fetches homepage + About/Team/Contact sub-pages with requests.
+            Extracts: mailto: links, plain-text emails, doctor names.
+            Fast: 2-5 seconds per clinic, no browser.
 
 Step 1+2  pattern_smtp_search()
-          Builds a candidate list:
-            - 8 common patterns  (info@, office@, frontdesk@, contact@, ...)
-            - 7 name-based patterns per doctor found in step 0
-              (drsmith@, dr.smith@, jsmith@, j.smith@, john.smith@, ...)
-          SMTP-verifies each candidate against the domain's mail server.
-          Stops at first confirmed hit. 10-30 seconds per clinic.
+            Builds a candidate list:
+              - 8 common patterns  (info@, office@, frontdesk@, contact@, ...)
+              - 7 name-based patterns per doctor found in step 0
+            SMTP-verifies each candidate. 10-30 seconds per clinic.
 
 Step 4    whois_lookup()
-          Queries the domain's WHOIS registration record for the registrant
-          email — often the owner's personal or practice address that never
-          appears on the website. Filters out privacy-protection addresses.
-          Fast: 3-5 seconds per domain.
+            Queries WHOIS registration record for the registrant email.
+            Filters out registrar / privacy-service addresses.
+            Fast: 3-5 seconds per domain.
+
+Step 5    apollo_lookup()
+            Calls Apollo.io People Search + Org Enrich APIs.
+            Finds emails that never appear on the website or WHOIS record.
+            Requires APOLLO_API_KEY in .env. Consumes Apollo credits.
+            Only runs when all free steps above have failed.
 
 Step 3    browser_find_email()
-          browser-use agent navigates the site and clicks Contact/About/Team tabs.
-          Last resort for emails hidden behind JS or contact-form-only pages.
-          1-2 minutes per clinic.
+            browser-use agent navigates the site and clicks tabs.
+            Last resort for emails hidden behind JS / contact forms.
+            1-2 minutes per clinic.
 
 Confidence tags written to leads_final.json:
   html_direct          email found in page HTML (mailto: or plain text)  HIGH
@@ -31,12 +34,15 @@ Confidence tags written to leads_final.json:
   catch_all_guess      server accepts all addresses, info@ returned       MEDIUM
   port25_blocked_guess ISP blocks port 25, info@ returned unverified      LOW
   whois_registrant     found in WHOIS domain registration record          MEDIUM
+  apollo               found via Apollo.io People/Org search              HIGH
   browser_scraped      browser agent scraped it                           HIGH
   not_found / error    all steps failed
 
-Setup:  pip install "browser-use" langchain-groq dnspython requests beautifulsoup4 python-whois
-        set GROQ_API_KEY=gsk_...
-Run:    python find_emails.py
+Setup:
+  pip install "browser-use" langchain-openai dnspython requests beautifulsoup4 python-whois python-dotenv
+  Copy .env.example to .env and fill in your keys.
+Run:
+  python find_emails.py
 """
 
 import asyncio
@@ -47,6 +53,9 @@ import smtplib
 import socket
 import sys
 from urllib.parse import urlparse
+
+from dotenv import load_dotenv
+load_dotenv()
 
 import requests
 from bs4 import BeautifulSoup
@@ -491,6 +500,120 @@ def whois_lookup(website):
     return {"emails": [], "method": "whois_no_email"}
 
 
+# ── Step 5: Apollo.io lookup ──────────────────────────────────────────────────
+
+_APOLLO_PEOPLE_URL = "https://api.apollo.io/api/v1/mixed_people/search"
+_APOLLO_ORG_URL    = "https://api.apollo.io/api/v1/organizations/enrich"
+
+# Titles most likely to own / manage a small dental practice
+_APOLLO_TITLES = [
+    "owner", "dentist", "dds", "dmd",
+    "office manager", "practice manager", "managing director",
+    "director", "principal", "founder",
+]
+
+
+def apollo_lookup(website, clinic_name):
+    """
+    Step 5: query Apollo.io for people / org emails at this domain.
+    Only runs when APOLLO_API_KEY is present in .env.
+    Tries people search first (returns individual contacts with titles),
+    then org enrich as a fallback.
+    Returns {
+      "emails":  [...],
+      "people":  [{"name", "title", "email"}, ...],
+      "method":  "apollo" | "apollo_not_found" | "apollo_skipped" | "apollo_error",
+    }
+    """
+    _section("STEP 5 -- Apollo.io Lookup")
+
+    api_key = os.environ.get("APOLLO_API_KEY", "").strip()
+    if not api_key:
+        _log("    APOLLO_API_KEY not set in .env -- skipping")
+        _log("    Add  APOLLO_API_KEY=your_key  to the .env file to enable this step.")
+        return {"emails": [], "people": [], "method": "apollo_skipped"}
+
+    domain = _domain_from_url(website)
+    if not domain:
+        _log("    Could not extract domain -- skipping")
+        return {"emails": [], "people": [], "method": "apollo_error"}
+
+    _log(f"    Domain  : {domain}")
+    _log(f"    Clinic  : {clinic_name}")
+
+    found_emails = []
+    found_people = []
+
+    # ── Try 1: People Search ─────────────────────────────────────────────
+    _log(f"\n    [1/2] People search at {domain} ...")
+    try:
+        resp = requests.post(
+            _APOLLO_PEOPLE_URL,
+            json={
+                "api_key":                  api_key,
+                "organization_domains":     [domain],
+                "person_titles":            _APOLLO_TITLES,
+                "contact_email_status":     ["verified", "likely to engage"],
+                "page":                     1,
+                "per_page":                 5,
+            },
+            timeout=15,
+        )
+        if resp.ok:
+            people = resp.json().get("people", [])
+            _log(f"    People returned : {len(people)}")
+            for p in people:
+                first = p.get("first_name", "") or ""
+                last  = p.get("last_name",  "") or ""
+                name  = f"{first} {last}".strip()
+                title = p.get("title", "") or ""
+                email = (p.get("email") or "").lower().strip()
+                # Apollo masks unverified emails as "email@domain.com" with "?" chars
+                if email and "@" in email and "?" not in email:
+                    _log(f"      + {name:<25} ({title:<30})  {email}")
+                    found_emails.append(email)
+                    found_people.append({"name": name, "title": title, "email": email})
+                else:
+                    masked = email or "no email"
+                    _log(f"      - {name:<25} ({title:<30})  {masked}  [masked/unavailable]")
+        else:
+            _log(f"    Apollo people search HTTP {resp.status_code}: {resp.text[:200]}")
+    except Exception as e:
+        _log(f"    Apollo people search error: {e}")
+
+    # ── Try 2: Org Enrich (if people search found nothing) ───────────────
+    if not found_emails:
+        _log(f"\n    [2/2] Organisation enrich for {domain} ...")
+        try:
+            resp = requests.post(
+                _APOLLO_ORG_URL,
+                json={"api_key": api_key, "domain": domain},
+                timeout=15,
+            )
+            if resp.ok:
+                org = resp.json().get("organization") or {}
+                # Apollo puts generic contact emails under various keys
+                for key in ("contact_emails", "emails"):
+                    for ce in (org.get(key) or []):
+                        ce = str(ce).lower().strip()
+                        if "@" in ce and "?" not in ce:
+                            _log(f"    Org email found: {ce}")
+                            found_emails.append(ce)
+                if not found_emails:
+                    _log(f"    No usable email in org record")
+            else:
+                _log(f"    Apollo org enrich HTTP {resp.status_code}: {resp.text[:200]}")
+        except Exception as e:
+            _log(f"    Apollo org enrich error: {e}")
+
+    if found_emails:
+        _log(f"\n    >> Apollo found: {found_emails[0]}")
+        return {"emails": found_emails, "people": found_people, "method": "apollo"}
+
+    _log(f"\n    >> Apollo found nothing for this domain")
+    return {"emails": [], "people": found_people, "method": "apollo_not_found"}
+
+
 # ── Step 3: browser agent ─────────────────────────────────────────────────────
 
 async def browser_find_email(website, clinic_name):
@@ -619,10 +742,24 @@ async def main_async():
             _section("STEP 4 -- WHOIS Lookup")
             _log(f"    Skipped — email already found in earlier step.")
 
+        # ── STEP 5: Apollo.io ────────────────────────────────────────────
+        if not email:
+            try:
+                ar = apollo_lookup(website, name)
+                if ar["emails"]:
+                    email      = ar["emails"][0]
+                    all_emails = ar["emails"]
+                    method     = ar["method"]
+            except Exception as e:
+                _log(f"    [step 5] ERROR: {e}")
+        else:
+            _section("STEP 5 -- Apollo.io Lookup")
+            _log(f"    Skipped — email already found in earlier step.")
+
         # ── STEP 3: browser agent (last resort) ───────────────────────────
         if not email:
-            _section("STEP 3 — Browser Agent  (last resort, slow)")
-            _log(f"    Steps 0, 1+2, and 4 all found nothing.")
+            _section("STEP 3 -- Browser Agent  (last resort, slow)")
+            _log(f"    Steps 0, 1+2, 4, and 5 all found nothing.")
             _log(f"    Launching browser agent to navigate the site ...")
             _log()
             try:
@@ -641,7 +778,7 @@ async def main_async():
                 _log(f"    [step 3] ERROR: {e}")
                 method = method or "error"
         else:
-            _section("STEP 3 — Browser Agent")
+            _section("STEP 3 -- Browser Agent")
             _log(f"    Skipped — email already found in earlier step.")
 
         # ── per-clinic result ─────────────────────────────────────────────
