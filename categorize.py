@@ -10,7 +10,7 @@ return the qualification fields from the Daryaft Labs plan (section 7.2):
     personalization_hook  one specific sentence about this clinic
     recommend_outreach    bool
 
-Setup:  pip install openai   &&   set GROQ_API_KEY=gsk_...
+Setup:  pip install openai python-dotenv   &&   fill in .env
 Run:    python categorize.py
 """
 
@@ -18,7 +18,10 @@ import json
 import os
 import time
 
+from dotenv import load_dotenv
 from openai import OpenAI
+
+load_dotenv()
 
 INPUT = "clinics_raw.json"
 OUTPUT = "clinics_qualified.json"
