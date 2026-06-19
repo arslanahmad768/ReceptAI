@@ -30,16 +30,28 @@ def get_stats(campaign_id: str, user: dict = Depends(get_current_user)):
     stats = repo.get_campaign_with_stats(campaign_id)
     if not stats:
         raise HTTPException(404, "Campaign not found")
+    if stats.get("created_by") != user["sub"]:
+        raise HTTPException(403, "Forbidden")
     return stats
 
 
 @router.post("/{campaign_id}/pause")
-async def pause(campaign_id: str, _user: dict = Depends(get_current_user)):
+async def pause(campaign_id: str, user: dict = Depends(get_current_user)):
+    stats = repo.get_campaign_with_stats(campaign_id)
+    if not stats:
+        raise HTTPException(404, "Campaign not found")
+    if stats.get("created_by") != user["sub"]:
+        raise HTTPException(403, "Forbidden")
     await pause_campaign(campaign_id)
     return {"status": "paused"}
 
 
 @router.post("/{campaign_id}/resume")
-async def resume(campaign_id: str, _user: dict = Depends(get_current_user)):
+async def resume(campaign_id: str, user: dict = Depends(get_current_user)):
+    stats = repo.get_campaign_with_stats(campaign_id)
+    if not stats:
+        raise HTTPException(404, "Campaign not found")
+    if stats.get("created_by") != user["sub"]:
+        raise HTTPException(403, "Forbidden")
     await resume_campaign(campaign_id)
     return {"status": "running"}

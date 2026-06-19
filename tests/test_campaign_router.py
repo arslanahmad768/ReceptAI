@@ -12,7 +12,7 @@ FAKE_CAMPAIGN = {
     "id": "camp-1", "status": "running", "niche_id": "n-1",
     "location_id": "loc-1", "initial_radius_km": 1.0,
     "max_depth": 4, "clinics_per_cell": 20, "created_at": "2026-06-20T00:00:00Z",
-    "city": "London", "country": "UK",
+    "city": "London", "country": "UK", "created_by": "user-1",
     "total_cells": 50, "done_cells": 10, "running_cells": 1,
     "pending_cells": 39, "saturated_cells": 0, "clinics_found": 120,
 }
@@ -58,7 +58,8 @@ def test_get_campaign_stats_returns_200():
 def test_pause_campaign_returns_200():
     app.dependency_overrides[get_current_user] = lambda: FAKE_USER
     try:
-        with patch("app.campaigns.router.pause_campaign", new_callable=AsyncMock):
+        with patch("app.campaigns.router.repo.get_campaign_with_stats", return_value=FAKE_CAMPAIGN), \
+             patch("app.campaigns.router.pause_campaign", new_callable=AsyncMock):
             resp = client.post("/campaigns/camp-1/pause", headers=AUTH)
     finally:
         app.dependency_overrides.pop(get_current_user, None)
@@ -68,7 +69,8 @@ def test_pause_campaign_returns_200():
 def test_resume_campaign_returns_200():
     app.dependency_overrides[get_current_user] = lambda: FAKE_USER
     try:
-        with patch("app.campaigns.router.resume_campaign", new_callable=AsyncMock):
+        with patch("app.campaigns.router.repo.get_campaign_with_stats", return_value=FAKE_CAMPAIGN), \
+             patch("app.campaigns.router.resume_campaign", new_callable=AsyncMock):
             resp = client.post("/campaigns/camp-1/resume", headers=AUTH)
     finally:
         app.dependency_overrides.pop(get_current_user, None)

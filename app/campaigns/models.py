@@ -1,13 +1,13 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class CampaignCreate(BaseModel):
     niche: str
     city: str
     country: str
-    initial_radius_km: float = 1.0
-    max_depth: int = 4
-    clinics_per_cell: int = 20
+    initial_radius_km: float = Field(default=1.0, gt=0, le=50.0)
+    max_depth: int = Field(default=4, ge=1, le=6)
+    clinics_per_cell: int = Field(default=20, ge=1, le=100)
 
 
 class CampaignOut(BaseModel):
