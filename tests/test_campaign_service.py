@@ -79,8 +79,6 @@ async def test_on_cell_complete_marks_done_when_not_saturated(mock_db):
         patch("app.campaigns.service.repo.update_campaign") as mock_update_c,
     ):
         from app.campaigns import service
-        import importlib
-        importlib.reload(service)
         await service.on_cell_complete("cc-1", raw_result_count=5)
 
     mock_update_cc.assert_called_once_with("cc-1", status="done", result_count=5)
@@ -115,8 +113,6 @@ async def test_on_cell_complete_subdivides_when_saturated(mock_db):
         patch("app.campaigns.service.repo.update_campaign"),
     ):
         from app.campaigns import service
-        import importlib
-        importlib.reload(service)
         await service.on_cell_complete("cc-1", raw_result_count=20)
 
     mock_store.assert_called_once()
