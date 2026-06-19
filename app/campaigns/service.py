@@ -52,9 +52,7 @@ async def on_cell_complete(campaign_cell_id: str, raw_result_count: int) -> None
         .eq("id", campaign_id).execute().data[0]
     cell = db.table("grid_cells").select("*").eq("id", cell_id).execute().data[0]
 
-    depth = cell["depth"] if isinstance(cell, dict) else 0
-    max_depth = camp["max_depth"] if isinstance(camp, dict) else SATURATION_THRESHOLD + 1
-    if raw_result_count >= SATURATION_THRESHOLD and depth < max_depth:
+    if raw_result_count >= SATURATION_THRESHOLD and cell["depth"] < camp["max_depth"]:
         parent = GridCell(cell["center_lat"], cell["center_lng"], cell["radius_km"], cell["depth"])
         sub_cells = subdivide_cell(parent, parent_id=cell_id)
         repo.store_cells(camp["location_id"], campaign_id, sub_cells)
