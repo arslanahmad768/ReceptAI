@@ -1,15 +1,22 @@
 """
-STAGE 3 — Five-step email finder (waterfall).
+STAGE 3 — Six-step email finder (waterfall) with optional US medical enrichment.
 
 Step 0    quick_scrape()
             Fetches homepage + About/Team/Contact sub-pages with requests.
             Extracts: mailto: links, plain-text emails, doctor names.
             Fast: 2-5 seconds per clinic, no browser.
 
+Step 0.5  npi_doctor_lookup()  [US medical only]
+            Queries the free NPI Registry (no API key required) to enrich
+            doctor names before SMTP patterns are built.  Only fires when
+            country="US" (or USA / United States) AND niche contains a
+            medical/dental keyword AND ENABLE_US_MEDICAL_LOOKUP=true.
+            Fast: <1 second per clinic.
+
 Step 1    pattern_smtp_search()
             Builds a candidate list:
               - 8 common patterns  (info@, office@, frontdesk@, contact@, ...)
-              - 7 name-based patterns per doctor found in step 0
+              - 7 name-based patterns per doctor found in steps 0 / 0.5
             SMTP-verifies each candidate. 10-30 seconds per clinic.
 
 Step 2    snov_lookup()
@@ -93,7 +100,6 @@ _EMAIL_SCORES: dict[str, int] = {
     "billing":       35,
     "accounts":      30,
     "webmaster":      0,
-    "noreply":        0,
     "noreply":        0,
     "donotreply":     0,
     "postmaster":     0,
@@ -570,6 +576,86 @@ def serp_email_search(clinic_name: str, domain: str) -> dict:
     return {"email": None, "all_emails": [], "method": "serp_not_found"}
 
 
+# ── Step 0.5: US medical NPI doctor enrichment ────────────────────────────────
+
+_NPI_API_URL = "https://npiregistry.cms.hhs.gov/api/"
+
+_US_MEDICAL_TERMS = frozenset([
+    "dental", "dentist", "dentistry", "clinic", "medical", "healthcare",
+    "orthodont", "periodon", "endodon", "oral", "health", "physician",
+    "doctor", "therapy", "chiropractic", "optometry", "surgery",
+])
+
+
+def _is_us_medical_niche(country: str | None, niche: str | None) -> bool:
+    """True only when country is US AND niche contains a medical/dental term
+    AND enable_us_medical_lookup is True in config.
+    Set ENABLE_US_MEDICAL_LOOKUP=false in .env to disable for non-US markets.
+    """
+    from app import config as _config
+    if not _config.get_settings().enable_us_medical_lookup:
+        return False
+    if (country or "").strip().lower() not in ("us", "usa", "united states"):
+        return False
+    niche_lower = (niche or "").lower()
+    return any(term in niche_lower for term in _US_MEDICAL_TERMS)
+
+
+def npi_doctor_lookup(
+    clinic_name: str, state: str | None = None
+) -> list[tuple[str, str]]:
+    """
+    Step 0.5 (US medical only) — Free NPI Registry doctor name enrichment.
+    No API key required. Returns up to MAX_DOCTORS (first, last) tuples.
+    These are merged with HTML-scraped names and fed into SMTP name patterns.
+    """
+    _section("STEP 0.5 — NPI Registry Doctor Name Enrichment (US Medical)")
+    params: dict[str, str | int] = {
+        "version":              "2.1",
+        "taxonomy_description": "Dentist",
+        "organization_name":    clinic_name,
+        "limit":                MAX_DOCTORS,
+    }
+    if state:
+        params["state"] = state.strip().upper()
+
+    try:
+        resp = requests.get(_NPI_API_URL, params=params, timeout=8)
+        if not resp.ok:
+            _log(f"    [npi] HTTP {resp.status_code}")
+            return []
+
+        results = resp.json().get("results", [])
+        _log(f"    NPI returned {len(results)} result(s) for '{clinic_name}'")
+
+        doctors: list[tuple[str, str]] = []
+        seen: set[tuple[str, str]]     = set()
+
+        for r in results:
+            basic = r.get("basic", {})
+            first = (
+                basic.get("authorized_official_first_name")
+                or basic.get("first_name")
+                or ""
+            ).strip()
+            last = (
+                basic.get("authorized_official_last_name")
+                or basic.get("last_name")
+                or ""
+            ).strip()
+            if first and last:
+                key = (first.lower(), last.lower())
+                if key not in seen:
+                    seen.add(key)
+                    doctors.append((first, last))
+                    _log(f"      Dr. {first} {last}")
+
+        return doctors[:MAX_DOCTORS]
+    except Exception as exc:
+        _log(f"    [npi] error: {exc}")
+        return []
+
+
 # ── Step 4: Hunter.io lookup ──────────────────────────────────────────────────
 
 _HUNTER_DOMAIN_URL  = "https://api.hunter.io/v2/domain-search"
@@ -737,18 +823,25 @@ async def browser_find_email(website, clinic_name):
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-async def find_email_for_clinic(website: str, clinic_name: str) -> dict:
+async def find_email_for_clinic(
+    website: str,
+    clinic_name: str,
+    country: str | None = None,
+    niche: str | None = None,
+    state: str | None = None,
+) -> dict:
     """
     Six-step waterfall — stops as soon as any step finds an email.
     Free steps run first; Hunter.io (paid) only fires when all free steps fail.
 
     Order:
-      0. HTML scrape     — free, 2-5s
-      1. SMTP patterns   — free, 10-30s  (skipped when port 25 is blocked)
-      2. Snov.io         — free, 50/month
-      3. SERP mining     — free, 100/month
-      4. Browser agent   — free (Groq), 1-2 min
-      5. Hunter.io       — paid, 1-2s    (last resort — only when all free steps fail)
+      0.   HTML scrape     — free, 2-5s
+      0.5  NPI enrichment  — free, <1s   (US medical only)
+      1.   SMTP patterns   — free, 10-30s  (skipped when port 25 is blocked)
+      2.   Snov.io         — free, 50/month
+      3.   SERP mining     — free, 100/month
+      4.   Browser agent   — free (Groq), 1-2 min
+      5.   Hunter.io       — paid, 1-2s    (last resort — only when all free steps fail)
 
     Returns: {email, method, all_emails, doctors_found, status}
     """
@@ -764,6 +857,18 @@ async def find_email_for_clinic(website: str, clinic_name: str) -> dict:
             method = "html_direct"
     except Exception:
         pass
+
+    # Step 0.5 — NPI doctor enrichment (US medical only — enriches doctor names before SMTP)
+    if _is_us_medical_niche(country, niche):
+        try:
+            npi_names = npi_doctor_lookup(clinic_name, state=state)
+            existing  = {(f.lower(), l.lower()) for f, l in doctors}
+            for first, last in npi_names:
+                if (first.lower(), last.lower()) not in existing:
+                    doctors.append((first, last))
+                    existing.add((first.lower(), last.lower()))
+        except Exception:
+            pass
 
     # Step 1 — SMTP pattern verify (free, 10-30s; skipped when port 25 blocked)
     if not email:
