@@ -307,7 +307,7 @@ def test_npi_doctor_lookup_returns_doctor_names(monkeypatch):
         ]
     }
 
-    with patch("requests.get", return_value=npi_resp):
+    with patch("app.scraper.stage3_emails.requests.get", return_value=npi_resp):
         result = npi_doctor_lookup("Sunny Dental", state="CA")
 
     assert ("John", "Smith") in result
@@ -326,7 +326,7 @@ def test_npi_doctor_lookup_returns_empty_on_no_results(monkeypatch):
     npi_resp.ok = True
     npi_resp.json.return_value = {"results": []}
 
-    with patch("requests.get", return_value=npi_resp):
+    with patch("app.scraper.stage3_emails.requests.get", return_value=npi_resp):
         result = npi_doctor_lookup("Unknown Clinic")
 
     assert result == []
@@ -349,7 +349,7 @@ def test_npi_doctor_lookup_deduplicates_names(monkeypatch):
         ]
     }
 
-    with patch("requests.get", return_value=npi_resp):
+    with patch("app.scraper.stage3_emails.requests.get", return_value=npi_resp):
         result = npi_doctor_lookup("Sunny Dental")
 
     assert result.count(("John", "Smith")) == 1
