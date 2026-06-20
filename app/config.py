@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     hunter_api_key: str | None = None
     snov_client_id: str | None = None
     snov_client_secret: str | None = None
+    serpapi_key: str | None = None
     allowed_origins: str = "http://localhost:3000"
 
     @field_validator("secret_key")

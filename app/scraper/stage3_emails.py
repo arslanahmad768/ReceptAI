@@ -1,5 +1,5 @@
 """
-STAGE 3 — Four-step email finder (waterfall).
+STAGE 3 — Five-step email finder (waterfall).
 
 Step 0    quick_scrape()
             Fetches homepage + About/Team/Contact sub-pages with requests.
@@ -12,12 +12,22 @@ Step 1    pattern_smtp_search()
               - 7 name-based patterns per doctor found in step 0
             SMTP-verifies each candidate. 10-30 seconds per clinic.
 
-Step 2    browser_find_email()
+Step 2    snov_lookup()
+            Snov.io domain email search.
+            Free plan: 50 credits/month.
+            Fast: 1-2 seconds per clinic (API call).
+
+Step 3    serp_email_search()
+            Google SERP email mining via SerpAPI.
+            Free plan: 100 searches/month.
+            Fast: 1-2 seconds per clinic (API call).
+
+Step 4    browser_find_email()
             browser-use agent navigates the site and clicks tabs.
             Last resort for emails hidden behind JS / contact forms.
             1-2 minutes per clinic.
 
-Step 3    hunter_lookup()
+Step 5    hunter_lookup()
             Queries Hunter.io for all indexed emails at this domain.
             Falls back to email-finder endpoint using doctor names from Step 0.
             Fast: 1-2 seconds per clinic (API call).
@@ -497,7 +507,70 @@ def snov_lookup(domain: str) -> dict:
     return {"email": None, "all_emails": [], "method": "snov_not_found"}
 
 
-# ── Step 3: Hunter.io lookup ──────────────────────────────────────────────────
+# ── Step 3: Google SERP email mining ─────────────────────────────────────────
+
+_SERPAPI_URL = "https://serpapi.com/search.json"
+
+
+def serp_email_search(clinic_name: str, domain: str) -> dict:
+    """
+    Step 3 — Google SERP email mining via SerpAPI.
+    Free plan: 100 searches/month. Requires SERPAPI_KEY.
+    Searches Google for emails indexed at the clinic's domain from any web source.
+    Only emails matching the clinic's own domain are returned.
+    Returns {"email": str|None, "all_emails": list[str], "method": str}.
+    method values: "serp" | "serp_not_found" | "serp_skipped"
+    """
+    api_key = get_settings().serpapi_key or ""
+    if not api_key:
+        _log("    [serp] SERPAPI_KEY not configured — skipping")
+        return {"email": None, "all_emails": [], "method": "serp_skipped"}
+
+    _section("STEP 3 — Google SERP Email Mining")
+    _log(f"    Clinic: {clinic_name}  Domain: {domain}")
+
+    # Three queries; stop as soon as one yields results
+    queries = [
+        f'"@{domain}"',
+        f'"{clinic_name}" email',
+        f'site:{domain} contact email',
+    ]
+
+    email_pattern = re.compile(
+        r'\b([a-zA-Z0-9._%+\-]+@' + re.escape(domain) + r')\b', re.I
+    )
+    found: set[str] = set()
+
+    for q in queries:
+        try:
+            resp = requests.get(
+                _SERPAPI_URL,
+                params={"q": q, "api_key": api_key, "num": 5, "engine": "google"},
+                timeout=10,
+            )
+            if resp.ok:
+                raw_text = json.dumps(resp.json().get("organic_results", []))
+                for m in email_pattern.finditer(raw_text):
+                    found.add(m.group(1).lower())
+                _log(f"    Query [{q[:50]}] → {len(found)} email(s) so far")
+                if found:
+                    break
+            else:
+                _log(f"    [serp] HTTP {resp.status_code} for query: {q}")
+        except Exception as exc:
+            _log(f"    [serp] error: {exc}")
+
+    if found:
+        emails = list(found)
+        best   = _best_email(emails) or emails[0]
+        _log(f"    >> SERP found: {best}")
+        return {"email": best, "all_emails": emails, "method": "serp"}
+
+    _log(f"    >> SERP found nothing for {domain}")
+    return {"email": None, "all_emails": [], "method": "serp_not_found"}
+
+
+# ── Step 4: Hunter.io lookup ──────────────────────────────────────────────────
 
 _HUNTER_DOMAIN_URL  = "https://api.hunter.io/v2/domain-search"
 _HUNTER_FINDER_URL  = "https://api.hunter.io/v2/email-finder"
@@ -666,15 +739,16 @@ async def browser_find_email(website, clinic_name):
 
 async def find_email_for_clinic(website: str, clinic_name: str) -> dict:
     """
-    Five-step waterfall — stops as soon as any step finds an email.
+    Six-step waterfall — stops as soon as any step finds an email.
     Free steps run first; Hunter.io (paid) only fires when all free steps fail.
 
     Order:
       0. HTML scrape     — free, 2-5s
       1. SMTP patterns   — free, 10-30s  (skipped when port 25 is blocked)
       2. Snov.io         — free, 50/month
-      3. Browser agent   — free (Groq), 1-2 min
-      4. Hunter.io       — paid, 1-2s    (last resort — only when all free steps fail)
+      3. SERP mining     — free, 100/month
+      4. Browser agent   — free (Groq), 1-2 min
+      5. Hunter.io       — paid, 1-2s    (last resort — only when all free steps fail)
 
     Returns: {email, method, all_emails, doctors_found, status}
     """
@@ -713,7 +787,19 @@ async def find_email_for_clinic(website: str, clinic_name: str) -> dict:
         except Exception:
             pass
 
-    # Step 3 — Browser agent (free via Groq, 1-2 min)
+    # Step 3 — SERP email mining (free 100/month; Google indexes emails from all web sources)
+    if not email:
+        try:
+            domain = _domain_from_url(website) or ""
+            if domain:
+                gr = serp_email_search(clinic_name, domain)
+                if gr.get("email"):
+                    email, method = gr["email"], gr["method"]
+                    all_emails    = gr["all_emails"]
+        except Exception:
+            pass
+
+    # Step 4 — Browser agent (free via Groq, 1-2 min)
     if not email:
         try:
             res = await browser_find_email(website, clinic_name)
@@ -725,7 +811,7 @@ async def find_email_for_clinic(website: str, clinic_name: str) -> dict:
         except Exception:
             method = "error"
 
-    # Step 4 — Hunter.io (paid, 1-2s, only when all free steps failed)
+    # Step 5 — Hunter.io (paid, 1-2s, only when all free steps failed)
     if not email:
         try:
             hr = hunter_lookup(website, doctors=doctors)
