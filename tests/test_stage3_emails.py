@@ -138,3 +138,106 @@ def test_snov_lookup_returns_error_when_token_fails(monkeypatch):
 
     assert result["email"] is None
     assert result["method"] == "snov_error"
+
+
+# ── SERP ──────────────────────────────────────────────────────────────────────
+
+def test_serp_email_search_skipped_when_no_key():
+    from app.scraper.stage3_emails import serp_email_search
+    result = serp_email_search("Sunny Dental", "sunnydental.com")
+    assert result["email"] is None
+    assert result["method"] == "serp_skipped"
+
+
+def test_serp_email_search_finds_email_in_snippet(monkeypatch):
+    from app.scraper.stage3_emails import serp_email_search
+    from app.scraper import stage3_emails
+
+    mock_settings = MagicMock()
+    mock_settings.serpapi_key = "test_serp_key"
+    monkeypatch.setattr(stage3_emails, "get_settings", lambda: mock_settings)
+
+    serp_resp = MagicMock()
+    serp_resp.ok = True
+    serp_resp.json.return_value = {
+        "organic_results": [
+            {
+                "title": "Sunny Dental Contact",
+                "snippet": "Contact us at info@sunnydental.com for appointments.",
+            }
+        ]
+    }
+
+    with patch("app.scraper.stage3_emails.requests.get", return_value=serp_resp):
+        result = serp_email_search("Sunny Dental", "sunnydental.com")
+
+    assert result["email"] == "info@sunnydental.com"
+    assert result["method"] == "serp"
+
+
+def test_serp_email_search_picks_best_of_multiple(monkeypatch):
+    from app.scraper.stage3_emails import serp_email_search
+    from app.scraper import stage3_emails
+
+    mock_settings = MagicMock()
+    mock_settings.serpapi_key = "test_serp_key"
+    monkeypatch.setattr(stage3_emails, "get_settings", lambda: mock_settings)
+
+    serp_resp = MagicMock()
+    serp_resp.ok = True
+    serp_resp.json.return_value = {
+        "organic_results": [
+            {
+                "snippet": (
+                    "webmaster@sunnydental.com or "
+                    "drjones@sunnydental.com or "
+                    "info@sunnydental.com"
+                )
+            }
+        ]
+    }
+
+    with patch("app.scraper.stage3_emails.requests.get", return_value=serp_resp):
+        result = serp_email_search("Sunny Dental", "sunnydental.com")
+
+    assert result["email"] == "drjones@sunnydental.com"
+
+
+def test_serp_email_search_returns_not_found_when_no_emails(monkeypatch):
+    from app.scraper.stage3_emails import serp_email_search
+    from app.scraper import stage3_emails
+
+    mock_settings = MagicMock()
+    mock_settings.serpapi_key = "test_serp_key"
+    monkeypatch.setattr(stage3_emails, "get_settings", lambda: mock_settings)
+
+    serp_resp = MagicMock()
+    serp_resp.ok = True
+    serp_resp.json.return_value = {"organic_results": [{"snippet": "No email here."}]}
+
+    with patch("app.scraper.stage3_emails.requests.get", return_value=serp_resp):
+        result = serp_email_search("Sunny Dental", "sunnydental.com")
+
+    assert result["email"] is None
+    assert result["method"] == "serp_not_found"
+
+
+def test_serp_email_search_only_returns_domain_emails(monkeypatch):
+    from app.scraper.stage3_emails import serp_email_search
+    from app.scraper import stage3_emails
+
+    mock_settings = MagicMock()
+    mock_settings.serpapi_key = "test_serp_key"
+    monkeypatch.setattr(stage3_emails, "get_settings", lambda: mock_settings)
+
+    serp_resp = MagicMock()
+    serp_resp.ok = True
+    # snippet contains an email from a DIFFERENT domain — must not be returned
+    serp_resp.json.return_value = {
+        "organic_results": [{"snippet": "Contact support@otherdomain.com for help."}]
+    }
+
+    with patch("app.scraper.stage3_emails.requests.get", return_value=serp_resp):
+        result = serp_email_search("Sunny Dental", "sunnydental.com")
+
+    assert result["email"] is None
