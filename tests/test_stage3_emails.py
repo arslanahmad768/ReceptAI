@@ -241,3 +241,115 @@ def test_serp_email_search_only_returns_domain_emails(monkeypatch):
         result = serp_email_search("Sunny Dental", "sunnydental.com")
 
     assert result["email"] is None
+
+
+# ── NPI / US medical niche guard ─────────────────────────────────────────────
+
+def test_is_us_medical_niche_true_for_dental_us(monkeypatch):
+    from app.scraper.stage3_emails import _is_us_medical_niche
+    from app import config
+
+    mock_settings = MagicMock()
+    mock_settings.enable_us_medical_lookup = True
+    monkeypatch.setattr(config, "get_settings", lambda: mock_settings)
+
+    assert _is_us_medical_niche("US", "dental clinic") is True
+
+
+def test_is_us_medical_niche_false_when_non_us(monkeypatch):
+    from app.scraper.stage3_emails import _is_us_medical_niche
+    from app import config
+
+    mock_settings = MagicMock()
+    mock_settings.enable_us_medical_lookup = True
+    monkeypatch.setattr(config, "get_settings", lambda: mock_settings)
+
+    assert _is_us_medical_niche("UK", "dental clinic") is False
+
+
+def test_is_us_medical_niche_false_when_non_medical(monkeypatch):
+    from app.scraper.stage3_emails import _is_us_medical_niche
+    from app import config
+
+    mock_settings = MagicMock()
+    mock_settings.enable_us_medical_lookup = True
+    monkeypatch.setattr(config, "get_settings", lambda: mock_settings)
+
+    assert _is_us_medical_niche("US", "restaurant") is False
+
+
+def test_is_us_medical_niche_false_when_disabled(monkeypatch):
+    from app.scraper.stage3_emails import _is_us_medical_niche
+    from app import config
+
+    mock_settings = MagicMock()
+    mock_settings.enable_us_medical_lookup = False
+    monkeypatch.setattr(config, "get_settings", lambda: mock_settings)
+
+    # Even though US + dental, the flag is off
+    assert _is_us_medical_niche("US", "dental clinic") is False
+
+
+def test_npi_doctor_lookup_returns_doctor_names(monkeypatch):
+    from app.scraper.stage3_emails import npi_doctor_lookup
+    from app import config
+
+    mock_settings = MagicMock()
+    mock_settings.enable_us_medical_lookup = True
+    monkeypatch.setattr(config, "get_settings", lambda: mock_settings)
+
+    npi_resp = MagicMock()
+    npi_resp.ok = True
+    npi_resp.json.return_value = {
+        "results": [
+            {"basic": {"authorized_official_first_name": "John", "authorized_official_last_name": "Smith"}},
+            {"basic": {"authorized_official_first_name": "Jane", "authorized_official_last_name": "Doe"}},
+        ]
+    }
+
+    with patch("requests.get", return_value=npi_resp):
+        result = npi_doctor_lookup("Sunny Dental", state="CA")
+
+    assert ("John", "Smith") in result
+    assert ("Jane", "Doe") in result
+
+
+def test_npi_doctor_lookup_returns_empty_on_no_results(monkeypatch):
+    from app.scraper.stage3_emails import npi_doctor_lookup
+    from app import config
+
+    mock_settings = MagicMock()
+    mock_settings.enable_us_medical_lookup = True
+    monkeypatch.setattr(config, "get_settings", lambda: mock_settings)
+
+    npi_resp = MagicMock()
+    npi_resp.ok = True
+    npi_resp.json.return_value = {"results": []}
+
+    with patch("requests.get", return_value=npi_resp):
+        result = npi_doctor_lookup("Unknown Clinic")
+
+    assert result == []
+
+
+def test_npi_doctor_lookup_deduplicates_names(monkeypatch):
+    from app.scraper.stage3_emails import npi_doctor_lookup
+    from app import config
+
+    mock_settings = MagicMock()
+    mock_settings.enable_us_medical_lookup = True
+    monkeypatch.setattr(config, "get_settings", lambda: mock_settings)
+
+    npi_resp = MagicMock()
+    npi_resp.ok = True
+    npi_resp.json.return_value = {
+        "results": [
+            {"basic": {"authorized_official_first_name": "John", "authorized_official_last_name": "Smith"}},
+            {"basic": {"authorized_official_first_name": "John", "authorized_official_last_name": "Smith"}},
+        ]
+    }
+
+    with patch("requests.get", return_value=npi_resp):
+        result = npi_doctor_lookup("Sunny Dental")
+
+    assert result.count(("John", "Smith")) == 1
