@@ -58,8 +58,12 @@ from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-from browser_use import Agent
-from langchain_openai import ChatOpenAI
+try:
+    from browser_use import Agent
+    from langchain_openai import ChatOpenAI
+    HAS_BROWSER = True
+except ImportError:
+    HAS_BROWSER = False
 
 try:
     import dns.resolver as _dns
@@ -592,8 +596,7 @@ def _is_us_medical_niche(country: str | None, niche: str | None) -> bool:
     AND enable_us_medical_lookup is True in config.
     Set ENABLE_US_MEDICAL_LOOKUP=false in .env to disable for non-US markets.
     """
-    from app import config as _config
-    if not _config.get_settings().enable_us_medical_lookup:
+    if not get_settings().enable_us_medical_lookup:
         return False
     if (country or "").strip().lower() not in ("us", "usa", "united states"):
         return False
@@ -792,6 +795,9 @@ def hunter_lookup(website: str, doctors: list | None = None) -> dict:
 # ── Step 3: browser agent ─────────────────────────────────────────────────────
 
 async def browser_find_email(website, clinic_name):
+    if not HAS_BROWSER:
+        _log("    [browser] browser-use not installed — skipping")
+        return {}
     task = (
         f"Go to {website} (the website of dental practice '{clinic_name}'). "
         f"Find a contact email address for the practice. Check the homepage, "

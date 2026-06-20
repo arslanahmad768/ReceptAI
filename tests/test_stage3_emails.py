@@ -252,6 +252,7 @@ def test_is_us_medical_niche_true_for_dental_us(monkeypatch):
     mock_settings = MagicMock()
     mock_settings.enable_us_medical_lookup = True
     monkeypatch.setattr(config, "get_settings", lambda: mock_settings)
+    monkeypatch.setattr("app.scraper.stage3_emails.get_settings", lambda: mock_settings)
 
     assert _is_us_medical_niche("US", "dental clinic") is True
 
@@ -263,6 +264,7 @@ def test_is_us_medical_niche_false_when_non_us(monkeypatch):
     mock_settings = MagicMock()
     mock_settings.enable_us_medical_lookup = True
     monkeypatch.setattr(config, "get_settings", lambda: mock_settings)
+    monkeypatch.setattr("app.scraper.stage3_emails.get_settings", lambda: mock_settings)
 
     assert _is_us_medical_niche("UK", "dental clinic") is False
 
@@ -274,6 +276,7 @@ def test_is_us_medical_niche_false_when_non_medical(monkeypatch):
     mock_settings = MagicMock()
     mock_settings.enable_us_medical_lookup = True
     monkeypatch.setattr(config, "get_settings", lambda: mock_settings)
+    monkeypatch.setattr("app.scraper.stage3_emails.get_settings", lambda: mock_settings)
 
     assert _is_us_medical_niche("US", "restaurant") is False
 
@@ -285,6 +288,7 @@ def test_is_us_medical_niche_false_when_disabled(monkeypatch):
     mock_settings = MagicMock()
     mock_settings.enable_us_medical_lookup = False
     monkeypatch.setattr(config, "get_settings", lambda: mock_settings)
+    monkeypatch.setattr("app.scraper.stage3_emails.get_settings", lambda: mock_settings)
 
     # Even though US + dental, the flag is off
     assert _is_us_medical_niche("US", "dental clinic") is False
