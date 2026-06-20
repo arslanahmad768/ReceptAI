@@ -425,6 +425,78 @@ def pattern_smtp_search(website, doctors=None):
     return {"email": None, "all_guesses": guesses, "method": "smtp_all_invalid"}
 
 
+# ── Step 2: Snov.io domain search ────────────────────────────────────────────
+
+_SNOV_TOKEN_URL  = "https://api.snov.io/v1/get-access-token"
+_SNOV_DOMAIN_URL = "https://api.snov.io/v1/get-domain-emails-with-info"
+
+
+def _snov_token(client_id: str, client_secret: str) -> str | None:
+    try:
+        resp = requests.post(
+            _SNOV_TOKEN_URL,
+            data={
+                "grant_type":    "client_credentials",
+                "client_id":     client_id,
+                "client_secret": client_secret,
+            },
+            timeout=10,
+        )
+        if resp.ok:
+            return resp.json().get("access_token")
+    except Exception:
+        pass
+    return None
+
+
+def snov_lookup(domain: str) -> dict:
+    """
+    Step 2 — Snov.io domain email search.
+    Free plan: 50 credits/month. Requires SNOV_CLIENT_ID + SNOV_CLIENT_SECRET.
+    Returns {"email": str|None, "all_emails": list[str], "method": str}.
+    method values: "snov_domain" | "snov_not_found" | "snov_skipped" | "snov_error"
+    """
+    settings      = get_settings()
+    client_id     = settings.snov_client_id or ""
+    client_secret = settings.snov_client_secret or ""
+    if not client_id or not client_secret:
+        _log("    [snov] credentials not configured — skipping")
+        return {"email": None, "all_emails": [], "method": "snov_skipped"}
+
+    _section("STEP 2 — Snov.io Domain Search")
+    _log(f"    Domain: {domain}")
+
+    token = _snov_token(client_id, client_secret)
+    if not token:
+        _log("    [snov] failed to obtain access token")
+        return {"email": None, "all_emails": [], "method": "snov_error"}
+
+    try:
+        resp = requests.post(
+            _SNOV_DOMAIN_URL,
+            data={"access_token": token, "domain": domain, "type": "all", "limit": 10},
+            timeout=10,
+        )
+        if resp.ok:
+            raw    = resp.json().get("emails", [])
+            emails = [
+                e["email"].lower().strip()
+                for e in raw
+                if e.get("email") and "@" in e.get("email", "")
+            ]
+            _log(f"    Snov.io returned {len(emails)} email(s)")
+            if emails:
+                best = _best_email(emails) or emails[0]
+                _log(f"    >> Snov.io found: {best}")
+                return {"email": best, "all_emails": emails, "method": "snov_domain"}
+        else:
+            _log(f"    [snov] HTTP {resp.status_code}")
+    except Exception as exc:
+        _log(f"    [snov] error: {exc}")
+
+    return {"email": None, "all_emails": [], "method": "snov_not_found"}
+
+
 # ── Step 3: Hunter.io lookup ──────────────────────────────────────────────────
 
 _HUNTER_DOMAIN_URL  = "https://api.hunter.io/v2/domain-search"
@@ -600,8 +672,9 @@ async def find_email_for_clinic(website: str, clinic_name: str) -> dict:
     Order:
       0. HTML scrape     — free, 2-5s
       1. SMTP patterns   — free, 10-30s  (skipped when port 25 is blocked)
-      2. Browser agent   — free (Groq), 1-2 min
-      3. Hunter.io       — paid, 1-2s    (last resort — only when all free steps fail)
+      2. Snov.io         — free, 50/month
+      3. Browser agent   — free (Groq), 1-2 min
+      4. Hunter.io       — paid, 1-2s    (last resort — only when all free steps fail)
 
     Returns: {email, method, all_emails, doctors_found, status}
     """
@@ -628,7 +701,19 @@ async def find_email_for_clinic(website: str, clinic_name: str) -> dict:
         except Exception:
             pass
 
-    # Step 2 — Browser agent (free via Groq, 1-2 min)
+    # Step 2 — Snov.io domain search (free 50/month; different DB than Hunter)
+    if not email:
+        try:
+            domain = _domain_from_url(website) or ""
+            if domain:
+                sr = snov_lookup(domain)
+                if sr.get("email"):
+                    email, method = sr["email"], sr["method"]
+                    all_emails    = sr["all_emails"]
+        except Exception:
+            pass
+
+    # Step 3 — Browser agent (free via Groq, 1-2 min)
     if not email:
         try:
             res = await browser_find_email(website, clinic_name)
@@ -640,7 +725,7 @@ async def find_email_for_clinic(website: str, clinic_name: str) -> dict:
         except Exception:
             method = "error"
 
-    # Step 3 — Hunter.io (paid, 1-2s, only when all free steps failed)
+    # Step 4 — Hunter.io (paid, 1-2s, only when all free steps failed)
     if not email:
         try:
             hr = hunter_lookup(website, doctors=doctors)
