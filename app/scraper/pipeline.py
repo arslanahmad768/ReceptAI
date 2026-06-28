@@ -105,15 +105,9 @@ async def _process_clinics(
                   f"Finding email {i}/{new_total}: {raw.get('name', '...')}",
                   clinics_found=total, new=new_total, qualified=qualified,
                   emails_found=emails_found, current=i, total=new_total)
-        # Extract US state from location string (e.g. "Houston, TX" → "TX")
-        location_parts = (niche_config.location or "").split(",")
-        state = location_parts[-1].strip() if len(location_parts) >= 2 else None
         result = await find_email_for_clinic(
             website,
             raw.get("name", ""),
-            country="US",
-            niche=niche_config.niche_id,
-            state=state,
         )
         if result.get("email"):
             emails_found += 1
@@ -121,6 +115,7 @@ async def _process_clinics(
             "clinic_id": clinic_id,
             "email": result["email"],
             "email_method": result["method"],
+            "contact_role": result.get("contact_role"),
             "all_emails": result["all_emails"],
             "doctors_found": result["doctors_found"],
             "status": "new",
