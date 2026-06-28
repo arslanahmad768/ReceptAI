@@ -108,6 +108,7 @@ async def _process_clinics(
         result = await find_email_for_clinic(
             website,
             raw.get("name", ""),
+            address=raw.get("address", ""),
         )
         if result.get("email"):
             emails_found += 1

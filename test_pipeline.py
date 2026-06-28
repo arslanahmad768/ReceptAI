@@ -40,17 +40,18 @@ CLINICS = [
 
 # ── Step label map ─────────────────────────────────────────────────────────────
 STEP_LABELS = {
-    "html_direct":       "Step 0  — HTML scrape",
-    "smtp_verified":     "Step 1  — SMTP pattern",
-    "smtp_unverified":   "Step 1  — SMTP (unverified)",
-    "snov_domain":       "Step 2  — Snov.io",
-    "serp":              "Step 3  — SERP / Google",
-    "browser_scraped":   "Step 4  — Browser agent",
-    "hunter_domain":     "Step 5  — Hunter.io",
-    "hunter_finder":     "Step 5  — Hunter.io finder",
-    "not_found":         "—       not found",
-    "contact_form_only": "—       contact form only",
-    "error":             "—       error",
+    "html_direct":           "Step 0   — HTML scrape",
+    "smtp_verified":         "Step 1   — SMTP pattern (NPI owner patterns included)",
+    "smtp_unverified":       "Step 1   — SMTP (unverified)",
+    "hunter_verified":       "Step 1   — SMTP catch-all → Hunter verify",
+    "snov_domain":           "Step 2   — Snov.io",
+    "serp":                  "Step 3   — SERP / Google",
+    "browser_scraped":       "Step 4   — Browser agent",
+    "hunter_domain":         "Step 5   — Hunter.io",
+    "hunter_finder":         "Step 5   — Hunter.io finder",
+    "not_found":             "—        not found",
+    "contact_form_only":     "—        contact form only",
+    "error":                 "—        error",
 }
 
 # ── Role priority label (shown next to email) ──────────────────────────────────

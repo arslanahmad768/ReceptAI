@@ -228,6 +228,91 @@ def test_serp_email_search_returns_not_found_when_no_emails(monkeypatch):
     assert result["method"] == "serp_not_found"
 
 
+# ── NPI helpers ───────────────────────────────────────────────────────────────
+
+def test_extract_state_zip_full_address():
+    from app.scraper.stage3_emails import _extract_state_zip
+    state, zip_ = _extract_state_zip("123 Main St, Austin, TX 78701, USA")
+    assert state == "TX"
+    assert zip_ == "78701"
+
+def test_extract_state_zip_no_zip():
+    from app.scraper.stage3_emails import _extract_state_zip
+    state, zip_ = _extract_state_zip("456 Oak Ave, Houston, TX, USA")
+    assert state == "TX"
+    assert zip_ is None
+
+def test_extract_state_zip_empty():
+    from app.scraper.stage3_emails import _extract_state_zip
+    assert _extract_state_zip("") == (None, None)
+    assert _extract_state_zip(None) == (None, None)
+
+def test_owner_name_patterns():
+    from app.scraper.stage3_emails import _owner_name_patterns
+    patterns = _owner_name_patterns("John", "Smith", "clinic.com")
+    assert "john.smith@clinic.com" in patterns
+    assert "jsmith@clinic.com" in patterns
+    assert "johnsmith@clinic.com" in patterns
+    # No dr. prefix for owner patterns
+    assert not any("dr" in p.split("@")[0] for p in patterns)
+
+def test_npi_owner_lookup_skipped_without_state(monkeypatch):
+    from app.scraper.stage3_emails import npi_owner_lookup
+    result = npi_owner_lookup("Bright Smiles Dental", None, None)
+    assert result["first_name"] is None
+    assert result["last_name"] is None
+
+def test_npi_owner_lookup_returns_owner(monkeypatch):
+    from app.scraper.stage3_emails import npi_owner_lookup
+    mock_resp = MagicMock()
+    mock_resp.ok = True
+    mock_resp.json.return_value = {
+        "results": [{
+            "basic": {
+                "authorized_official_first_name": "JANE",
+                "authorized_official_last_name": "DOE",
+                "authorized_official_title_or_position": "OWNER",
+            }
+        }]
+    }
+    with patch("app.scraper.stage3_emails.requests.get", return_value=mock_resp):
+        result = npi_owner_lookup("Bright Smiles Dental", "TX", "78701")
+    assert result["first_name"] == "JANE"
+    assert result["last_name"] == "DOE"
+    assert result["title"] == "OWNER"
+
+def test_npi_owner_lookup_returns_empty_on_no_results(monkeypatch):
+    from app.scraper.stage3_emails import npi_owner_lookup
+    mock_resp = MagicMock()
+    mock_resp.ok = True
+    mock_resp.json.return_value = {"results": []}
+    with patch("app.scraper.stage3_emails.requests.get", return_value=mock_resp):
+        result = npi_owner_lookup("Unknown Clinic", "TX", "78701")
+    assert result["first_name"] is None
+
+
+def test_serp_email_search_does_not_misextract_subdomain_tld(monkeypatch):
+    """@clinic.com must not be extracted from @clinic.com.au (false positive)."""
+    from app.scraper.stage3_emails import serp_email_search
+    from app.scraper import stage3_emails
+
+    mock_settings = MagicMock()
+    mock_settings.serpapi_key = "test_serp_key"
+    monkeypatch.setattr(stage3_emails, "get_settings", lambda: mock_settings)
+
+    serp_resp = MagicMock()
+    serp_resp.ok = True
+    serp_resp.json.return_value = {
+        "organic_results": [{"snippet": "Email us at info@sunnydental.com.au for bookings."}]
+    }
+
+    with patch("app.scraper.stage3_emails.requests.get", return_value=serp_resp):
+        # searching for sunnydental.com — must NOT match sunnydental.com.au
+        result = serp_email_search("Sunny Dental", "sunnydental.com")
+
+    assert result["email"] is None
+
+
 def test_serp_email_search_only_returns_domain_emails(monkeypatch):
     from app.scraper.stage3_emails import serp_email_search
     from app.scraper import stage3_emails
