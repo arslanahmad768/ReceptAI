@@ -1,15 +1,22 @@
 """
-STAGE 3 — Five-step email finder (waterfall).
+STAGE 3 — Six-step email finder (waterfall).
 
 Step 0    quick_scrape()
             Fetches homepage + About/Team/Contact sub-pages with requests.
             Extracts: mailto: links, plain-text emails, doctor names.
             Fast: 2-5 seconds per clinic, no browser.
 
+Step 0.5  npi_owner_lookup()
+            Queries the NPPES NPI Registry for the clinic's authorized official
+            (owner / CFO / office manager) when no email was found in Step 0.
+            Extracts owner name → feeds targeted SMTP patterns into Step 1.
+            US clinics only; requires state in the address field. Free, no key.
+
 Step 1    pattern_smtp_search()
             Builds a candidate list:
               - 8 common patterns  (info@, office@, frontdesk@, contact@, ...)
-              - 7 name-based patterns per doctor found in steps 0 / 0.5
+              - 7 name-based patterns per doctor found in Step 0
+              - 5 owner-name patterns from NPI Step 0.5 (no dr. prefix)
             SMTP-verifies each candidate. 10-30 seconds per clinic.
 
 Step 2    snov_lookup()
@@ -76,6 +83,86 @@ SCRAPE_HEADERS = {
         "Chrome/124.0 Safari/537.36"
     )
 }
+
+# ── NPI Registry (Step 0.5) ───────────────────────────────────────────────────
+
+_NPI_API_URL = "https://npiregistry.cms.hhs.gov/api/"
+
+
+def _extract_state_zip(address: str) -> tuple[str | None, str | None]:
+    """Parse US state code and 5-digit ZIP from a Google Maps address string."""
+    if not address:
+        return None, None
+    # "Austin, TX 78701" or "Austin, TX 78701-1234"
+    m = re.search(r',\s*([A-Z]{2})\s+(\d{5})(?:-\d{4})?\b', address)
+    if m:
+        return m.group(1), m.group(2)
+    # Without comma: "TX 78701"
+    m = re.search(r'\b([A-Z]{2})\s+(\d{5})(?:-\d{4})?\b', address)
+    if m:
+        return m.group(1), m.group(2)
+    # State only, no ZIP
+    m = re.search(r',\s*([A-Z]{2})\b', address)
+    if m:
+        return m.group(1), None
+    return None, None
+
+
+def npi_owner_lookup(clinic_name: str, state: str | None, postal_code: str | None) -> dict:
+    """
+    Step 0.5 — NPPES NPI Registry lookup for a clinic's authorized official.
+
+    Searches organization_name (prefix wildcard) + enumeration_type=NPI-2 + state.
+    Tries with postal_code first (more specific), falls back to state-only.
+    Returns the authorized_official fields which represent the clinic's legal
+    signing authority: owner, CFO, office manager, or similar decision-maker.
+
+    Returns {"first_name": str|None, "last_name": str|None, "title": str|None}.
+    """
+    if not clinic_name or not state:
+        return {"first_name": None, "last_name": None, "title": None}
+
+    words = clinic_name.strip().split()[:3]
+    base_params: dict = {
+        "organization_name": " ".join(words) + "*",
+        "enumeration_type": "NPI-2",
+        "state": state,
+        "limit": 5,
+        "version": "2.1",
+    }
+
+    def _query(params: dict) -> list:
+        try:
+            resp = requests.get(_NPI_API_URL, params=params, timeout=10)
+            if resp.ok:
+                return resp.json().get("results", [])
+        except Exception:
+            pass
+        return []
+
+    # Most specific: add postal_code to disambiguate multiple same-name clinics
+    if postal_code:
+        results = _query({**base_params, "postal_code": postal_code})
+        if results:
+            basic = results[0].get("basic", {})
+            return {
+                "first_name": basic.get("authorized_official_first_name"),
+                "last_name": basic.get("authorized_official_last_name"),
+                "title": basic.get("authorized_official_title_or_position"),
+            }
+
+    # Fallback: state only
+    results = _query(base_params)
+    if results:
+        basic = results[0].get("basic", {})
+        return {
+            "first_name": basic.get("authorized_official_first_name"),
+            "last_name": basic.get("authorized_official_last_name"),
+            "title": basic.get("authorized_official_title_or_position"),
+        }
+
+    return {"first_name": None, "last_name": None, "title": None}
+
 
 # ── Email quality scoring ─────────────────────────────────────────────────────
 
@@ -296,6 +383,18 @@ def _name_patterns(first, last, domain):
     ]
 
 
+def _owner_name_patterns(first: str, last: str, domain: str) -> list[str]:
+    """SMTP patterns for a non-doctor owner/admin (no dr. prefix)."""
+    f, l, fi = first.lower(), last.lower(), first[0].lower()
+    return [
+        f"{f}.{l}@{domain}",
+        f"{fi}{l}@{domain}",
+        f"{f}{l}@{domain}",
+        f"{f}@{domain}",
+        f"{l}@{domain}",
+    ]
+
+
 def quick_scrape(website):
     """
     Step 0: fetch sub-pages, extract emails + doctor names.
@@ -416,9 +515,11 @@ def _smtp_status(email, mx):
         return "unverifiable"
 
 
-def pattern_smtp_search(website, doctors=None):
+def pattern_smtp_search(website, doctors=None, owners=None):
     """
-    Steps 1+2: build candidate patterns, SMTP-verify each one.
+    Step 1: build candidate patterns, SMTP-verify each one.
+    doctors — list of (first, last) dentist tuples → generates dr. prefix patterns
+    owners  — list of (first, last) owner/admin tuples from NPI → no dr. prefix
     """
     domain = _domain_from_url(website)
     if not domain:
@@ -429,6 +530,10 @@ def pattern_smtp_search(website, doctors=None):
     named   = []
     for first, last in (doctors or []):
         for pat in _name_patterns(first, last, domain):
+            if pat not in common and pat not in named:
+                named.append(pat)
+    for first, last in (owners or []):
+        for pat in _owner_name_patterns(first, last, domain):
             if pat not in common and pat not in named:
                 named.append(pat)
 
@@ -589,8 +694,10 @@ def serp_email_search(clinic_name: str, domain: str) -> dict:
         f'site:{domain} contact email',
     ]
 
+    # Negative lookahead (?!\.[a-zA-Z]) stops @domain.com matching inside
+    # @domain.com.au — the old \b word-boundary fired between 'm' and '.' there.
     email_pattern = re.compile(
-        r'\b([a-zA-Z0-9._%+\-]+@' + re.escape(domain) + r')\b', re.I
+        r'([a-zA-Z0-9._%+\-]+@' + re.escape(domain) + r')(?!\.[a-zA-Z])', re.I
     )
     found: set[str] = set()
 
@@ -798,22 +905,25 @@ async def browser_find_email(website, clinic_name):
 async def find_email_for_clinic(
     website: str,
     clinic_name: str,
+    address: str = "",
 ) -> dict:
     """
-    Five-step waterfall — stops as soon as any step finds an email.
+    Six-step waterfall — stops as soon as any step finds an email.
     Free steps run first; Hunter.io (paid) only fires when all free steps fail.
 
     Order:
-      0.  HTML scrape     — free, 2-5s
-      1.  SMTP patterns   — free, 10-30s  (skipped when port 25 is blocked)
-      2.  Snov.io         — free, 50/month
-      3.  SERP mining     — free, 100/month
-      4.  Browser agent   — free (Groq), 1-2 min
-      5.  Hunter.io       — paid, 1-2s    (last resort — only when all free steps fail)
+      0.   HTML scrape     — free, 2-5s
+      0.5  NPI owner name  — free, 1-2s   (US only; enriches Step 1 patterns)
+      1.   SMTP patterns   — free, 10-30s  (skipped when port 25 is blocked)
+      2.   Snov.io         — free, 50/month
+      3.   SERP mining     — free, 100/month
+      4.   Browser agent   — free (Groq), 1-2 min
+      5.   Hunter.io       — paid, 1-2s    (last resort)
 
     Returns: {email, method, all_emails, doctors_found, contact_role, status}
     """
     email, method, all_emails, doctors = None, None, [], []
+    npi_owner: dict = {"first_name": None, "last_name": None, "title": None}
 
     # Step 0 — HTML scrape (free, fastest)
     try:
@@ -826,10 +936,34 @@ async def find_email_for_clinic(
     except Exception:
         pass
 
+    # Step 0.5 — NPI Registry owner lookup (US only; no API key needed)
+    # Runs only when Step 0 found no email. Extracts the clinic's authorized
+    # official (owner/CFO/manager) from the NPPES database and feeds their
+    # name into Step 1's SMTP pattern generator.
+    if not email:
+        state, postal_code = _extract_state_zip(address)
+        if state:
+            try:
+                npi_owner = await asyncio.to_thread(
+                    npi_owner_lookup, clinic_name, state, postal_code
+                )
+                if npi_owner.get("first_name"):
+                    _log(
+                        f"    [npi] Found: {npi_owner['first_name']} {npi_owner['last_name']}"
+                        f" ({npi_owner.get('title') or 'no title'})"
+                    )
+            except Exception:
+                pass
+
     # Step 1 — SMTP pattern verify (free, 10-30s; skipped when port 25 blocked)
     if not email:
         try:
-            fb = pattern_smtp_search(website, doctors=doctors)
+            owners = (
+                [(npi_owner["first_name"], npi_owner["last_name"])]
+                if npi_owner.get("first_name") and npi_owner.get("last_name")
+                else []
+            )
+            fb = pattern_smtp_search(website, doctors=doctors, owners=owners)
             if fb.get("email"):
                 email, method = fb["email"], fb["method"]
                 all_emails = fb.get("all_guesses", [])
@@ -882,11 +1016,18 @@ async def find_email_for_clinic(
         except Exception:
             pass
 
+    # Infer role from email prefix; fall back to NPI authorized-official title
+    # when the email is a personal name (e.g. jsmith@) with no recognizable prefix.
+    role = _infer_role(email)
+    if role is None and email and npi_owner.get("title"):
+        raw_title = npi_owner["title"].strip()
+        role = raw_title.title() if raw_title else None
+
     return {
         "email": email,
         "method": method or "not_found",
         "all_emails": all_emails,
         "doctors_found": [f"Dr. {f} {l}" for f, l in doctors],
-        "contact_role": _infer_role(email),
+        "contact_role": role,
         "status": "found" if email else "not_found",
     }
