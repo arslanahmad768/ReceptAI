@@ -71,7 +71,8 @@ create table if not exists leads (
   id            uuid primary key default gen_random_uuid(),
   clinic_id     uuid unique references clinics(id) on delete cascade,
   email         text,
-  email_method  text,  -- html_direct|smtp_verified|whois_registrant|apollo|browser_scraped
+  email_method  text,  -- html_direct|smtp_verified|snov_domain|serp|browser_scraped|hunter_domain
+  contact_role  text,  -- inferred from email prefix: Owner|Manager|Director|CEO|Doctor/Dentist|null
   all_emails    jsonb,
   doctors_found jsonb,
   status        text default 'new',  -- new|contacted|replied|converted|rejected

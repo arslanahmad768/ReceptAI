@@ -1,7 +1,9 @@
 import asyncio
+import json
 import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sse_starlette.sse import EventSourceResponse
 from starlette.requests import Request
 from app.auth.dependencies import get_current_user
 from app.database import get_db
@@ -65,3 +67,29 @@ async def get_job(job_id: str, user: dict = Depends(get_current_user)):
 async def list_jobs(user: dict = Depends(get_current_user)):
     db = get_db()
     return db.table("scrape_jobs").select("*").order("created_at", desc=True).limit(50).execute().data
+
+
+@router.get("/jobs/{job_id}/stream")
+async def stream_job(job_id: str, _user: dict = Depends(get_current_user)):
+    """SSE stream — connect once and receive live progress until the job finishes."""
+    db = get_db()
+
+    async def _events():
+        while True:
+            row = db.table("scrape_jobs") \
+                    .select("status,progress,error_msg") \
+                    .eq("id", job_id).execute()
+            if not row.data:
+                yield {"event": "error", "data": json.dumps({"detail": "Job not found"})}
+                break
+            job = row.data[0]
+            yield {"data": json.dumps({
+                "status":    job["status"],
+                "progress":  job.get("progress") or {},
+                "error_msg": job.get("error_msg"),
+            })}
+            if job["status"] in ("done", "failed"):
+                break
+            await asyncio.sleep(2)
+
+    return EventSourceResponse(_events())

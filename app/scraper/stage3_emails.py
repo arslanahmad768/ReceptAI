@@ -1,17 +1,10 @@
 """
-STAGE 3 — Six-step email finder (waterfall) with optional US medical enrichment.
+STAGE 3 — Five-step email finder (waterfall).
 
 Step 0    quick_scrape()
             Fetches homepage + About/Team/Contact sub-pages with requests.
             Extracts: mailto: links, plain-text emails, doctor names.
             Fast: 2-5 seconds per clinic, no browser.
-
-Step 0.5  npi_doctor_lookup()  [US medical only]
-            Queries the free NPI Registry (no API key required) to enrich
-            doctor names before SMTP patterns are built.  Only fires when
-            country="US" (or USA / United States) AND niche contains a
-            medical/dental keyword AND ENABLE_US_MEDICAL_LOOKUP=true.
-            Fast: <1 second per clinic.
 
 Step 1    pattern_smtp_search()
             Builds a candidate list:
@@ -87,22 +80,37 @@ SCRAPE_HEADERS = {
 # ── Email quality scoring ─────────────────────────────────────────────────────
 
 _EMAIL_SCORES: dict[str, int] = {
-    "info":          90,
-    "office":        90,
-    "frontdesk":     85,
-    "front":         80,
-    "contact":       80,
-    "hello":         75,
-    "inquiries":     75,
-    "enquiries":     75,
-    "appointments":  70,
-    "scheduling":    70,
-    "booking":       70,
-    "reception":     70,
-    "support":       50,
-    "admin":         40,
-    "billing":       35,
-    "accounts":      30,
+    # Business decision-makers — sign contracts, evaluate vendors
+    "ceo":          100,
+    "owner":        100,
+    "founder":      100,
+    "cofounder":     99,
+    "president":     98,
+    "director":      97,
+    "manager":       96,
+    "gm":            96,  # general manager
+    "principal":     94,
+    "partner":       94,
+    "vp":            92,
+    # Generic business inboxes — unknown who reads them
+    "info":          75,
+    "office":        75,
+    "contact":       70,
+    "hello":         65,
+    "inquiries":     65,
+    "enquiries":     65,
+    # Patient-facing / operational — rarely the buyer
+    "frontdesk":     45,
+    "front":         40,
+    "appointments":  35,
+    "scheduling":    35,
+    "booking":       35,
+    "reception":     35,
+    "support":       30,
+    "admin":         25,
+    "billing":       15,
+    "accounts":      10,
+    # Disqualified
     "webmaster":      0,
     "noreply":        0,
     "donotreply":     0,
@@ -111,19 +119,41 @@ _EMAIL_SCORES: dict[str, int] = {
     "abuse":          0,
 }
 
+# Maps cleaned email prefix → human-readable role label
+_ROLE_LABELS: dict[str, str] = {
+    "ceo":       "CEO",
+    "owner":     "Owner",
+    "founder":   "Founder / Owner",
+    "cofounder": "Co-Founder",
+    "president": "President",
+    "director":  "Director",
+    "manager":   "Manager",
+    "gm":        "General Manager",
+    "principal": "Principal",
+    "partner":   "Partner",
+    "vp":        "VP",
+}
+
 
 def _email_priority_score(email: str) -> int:
-    """Score an email address by how likely it reaches a decision-maker.
-    Higher = better. dr. prefix = 100, info/office = 90, webmaster = 0.
+    """Score an email by how likely it reaches a purchasing decision-maker.
+    Higher = better.
+      100 — owner / CEO / founder (signs contracts)
+       92-98 — director / manager / GM / president / VP (evaluates vendors)
+       85 — dr. prefix (dentist — patient-focused, not primary buyer unless also owner)
+       75 — info@ / office@ (generic inbox, unknown who reads it)
+       35-65 — frontdesk / reception / appointments (patient-facing staff)
+       70 — unknown personal name (could be anyone — defaulted high)
+        0 — webmaster / noreply / postmaster (disqualified)
     """
     prefix = email.split("@")[0].lower()
     if re.match(r"^dr[.\-]?[a-z]", prefix):
-        return 100
+        return 85  # dentist — valuable but not primary purchasing contact
     clean = re.sub(r"[.\-_]", "", prefix)
     for keyword, score in _EMAIL_SCORES.items():
         if re.sub(r"[.\-_]", "", keyword) == clean:
             return score
-    return 70  # unknown prefix — treat as personal name, high value
+    return 70  # unknown personal name — could be owner, defaulted high
 
 
 def _best_email(emails: list[str]) -> str | None:
@@ -131,6 +161,19 @@ def _best_email(emails: list[str]) -> str | None:
     if not emails:
         return None
     return max(emails, key=_email_priority_score)
+
+
+def _infer_role(email: str) -> str | None:
+    """Infer the contact's role from the email prefix.
+    Returns a human-readable label, or None if the role cannot be determined.
+    """
+    if not email:
+        return None
+    prefix = email.split("@")[0].lower()
+    if re.match(r"^dr[.\-]?[a-z]", prefix):
+        return "Doctor / Dentist"
+    clean = re.sub(r"[.\-_]", "", prefix)
+    return _ROLE_LABELS.get(clean)
 
 SUBPAGES = [
     "",
@@ -580,83 +623,6 @@ def serp_email_search(clinic_name: str, domain: str) -> dict:
     return {"email": None, "all_emails": [], "method": "serp_not_found"}
 
 
-# ── Step 0.5: US medical NPI doctor enrichment ────────────────────────────────
-
-_NPI_API_URL = "https://npiregistry.cms.hhs.gov/api/"
-
-_US_MEDICAL_TERMS = frozenset([
-    "dental", "dentist", "dentistry", "clinic", "medical", "healthcare",
-    "orthodont", "periodon", "endodon", "oral", "health", "physician",
-    "doctor", "therapy", "chiropractic", "optometry", "surgery",
-])
-
-
-def _is_us_medical_niche(country: str | None, niche: str | None) -> bool:
-    """True only when country is US AND niche contains a medical/dental term
-    AND enable_us_medical_lookup is True in config.
-    Set ENABLE_US_MEDICAL_LOOKUP=false in .env to disable for non-US markets.
-    """
-    if not get_settings().enable_us_medical_lookup:
-        return False
-    if (country or "").strip().lower() not in ("us", "usa", "united states"):
-        return False
-    niche_lower = (niche or "").lower()
-    return any(term in niche_lower for term in _US_MEDICAL_TERMS)
-
-
-def npi_doctor_lookup(
-    clinic_name: str, state: str | None = None
-) -> list[tuple[str, str]]:
-    """
-    Step 0.5 (US medical only) — Free NPI Registry doctor name enrichment.
-    No API key required. Returns up to MAX_DOCTORS (first, last) tuples.
-    These are merged with HTML-scraped names and fed into SMTP name patterns.
-    """
-    _section("STEP 0.5 — NPI Registry Doctor Name Enrichment (US Medical)")
-    params: dict[str, str | int] = {
-        "version":              "2.1",
-        "taxonomy_description": "Dentist",
-        "organization_name":    clinic_name,
-        "limit":                MAX_DOCTORS,
-    }
-    if state:
-        params["state"] = state.strip().upper()
-
-    try:
-        resp = requests.get(_NPI_API_URL, params=params, timeout=8)
-        if not resp.ok:
-            _log(f"    [npi] HTTP {resp.status_code}")
-            return []
-
-        results = resp.json().get("results", [])
-        _log(f"    NPI returned {len(results)} result(s) for '{clinic_name}'")
-
-        doctors: list[tuple[str, str]] = []
-        seen: set[tuple[str, str]]     = set()
-
-        for r in results:
-            basic = r.get("basic", {})
-            first = (
-                basic.get("authorized_official_first_name")
-                or basic.get("first_name")
-                or ""
-            ).strip()
-            last = (
-                basic.get("authorized_official_last_name")
-                or basic.get("last_name")
-                or ""
-            ).strip()
-            if first and last:
-                key = (first.lower(), last.lower())
-                if key not in seen:
-                    seen.add(key)
-                    doctors.append((first, last))
-                    _log(f"      Dr. {first} {last}")
-
-        return doctors[:MAX_DOCTORS]
-    except Exception as exc:
-        _log(f"    [npi] error: {exc}")
-        return []
 
 
 # ── Step 4: Hunter.io lookup ──────────────────────────────────────────────────
@@ -832,24 +798,20 @@ async def browser_find_email(website, clinic_name):
 async def find_email_for_clinic(
     website: str,
     clinic_name: str,
-    country: str | None = None,
-    niche: str | None = None,
-    state: str | None = None,
 ) -> dict:
     """
-    Six-step waterfall — stops as soon as any step finds an email.
+    Five-step waterfall — stops as soon as any step finds an email.
     Free steps run first; Hunter.io (paid) only fires when all free steps fail.
 
     Order:
-      0.   HTML scrape     — free, 2-5s
-      0.5  NPI enrichment  — free, <1s   (US medical only)
-      1.   SMTP patterns   — free, 10-30s  (skipped when port 25 is blocked)
-      2.   Snov.io         — free, 50/month
-      3.   SERP mining     — free, 100/month
-      4.   Browser agent   — free (Groq), 1-2 min
-      5.   Hunter.io       — paid, 1-2s    (last resort — only when all free steps fail)
+      0.  HTML scrape     — free, 2-5s
+      1.  SMTP patterns   — free, 10-30s  (skipped when port 25 is blocked)
+      2.  Snov.io         — free, 50/month
+      3.  SERP mining     — free, 100/month
+      4.  Browser agent   — free (Groq), 1-2 min
+      5.  Hunter.io       — paid, 1-2s    (last resort — only when all free steps fail)
 
-    Returns: {email, method, all_emails, doctors_found, status}
+    Returns: {email, method, all_emails, doctors_found, contact_role, status}
     """
     email, method, all_emails, doctors = None, None, [], []
 
@@ -863,18 +825,6 @@ async def find_email_for_clinic(
             method = "html_direct"
     except Exception:
         pass
-
-    # Step 0.5 — NPI doctor enrichment (US medical only — enriches doctor names before SMTP)
-    if _is_us_medical_niche(country, niche):
-        try:
-            npi_names = npi_doctor_lookup(clinic_name, state=state)
-            existing  = {(f.lower(), l.lower()) for f, l in doctors}
-            for first, last in npi_names:
-                if (first.lower(), last.lower()) not in existing:
-                    doctors.append((first, last))
-                    existing.add((first.lower(), last.lower()))
-        except Exception:
-            pass
 
     # Step 1 — SMTP pattern verify (free, 10-30s; skipped when port 25 blocked)
     if not email:
@@ -937,5 +887,6 @@ async def find_email_for_clinic(
         "method": method or "not_found",
         "all_emails": all_emails,
         "doctors_found": [f"Dr. {f} {l}" for f, l in doctors],
+        "contact_role": _infer_role(email),
         "status": "found" if email else "not_found",
     }

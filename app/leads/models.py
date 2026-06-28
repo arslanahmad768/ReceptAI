@@ -9,4 +9,5 @@ class LeadOut(BaseModel):
     clinic_id: str
     email: Optional[str]
     email_method: Optional[str]
+    contact_role: Optional[str]
     status: str

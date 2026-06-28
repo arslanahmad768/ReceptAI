@@ -35,7 +35,6 @@ class Settings(BaseSettings):
     snov_client_id: str | None = None
     snov_client_secret: str | None = None
     serpapi_key: str | None = None
-    enable_us_medical_lookup: bool = True  # set False to disable US-specific NPI lookups
     allowed_origins: str = "http://localhost:3000"
 
     @field_validator("secret_key")
