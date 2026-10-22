@@ -141,12 +141,27 @@ HEADER_JS = """() => {
         count = c ? parseInt(c[1].replace(/,/g, '')) : null;
     }
     const web = document.querySelector("a[data-item-id='authority']");
+
+    // Per-day opening hours: rendered (even if visually collapsed) as
+    // buttons with aria-label "Monday, 8 AM to 5 PM, Copy open hours" or
+    // "Saturday, Closed, Copy open hours" — no click needed to read them.
+    const hours = {};
+    document.querySelectorAll('button.mWUh3d[aria-label]').forEach(b => {
+        const label = (b.getAttribute('aria-label') || '').replace(/,\\s*Copy open hours\\s*$/i, '');
+        const idx = label.indexOf(',');
+        if (idx === -1) return;
+        const day = label.slice(0, idx).trim();
+        const hoursText = label.slice(idx + 1).trim();
+        if (day) hours[day] = hoursText;
+    });
+
     return {
         name: t('h1.DUwDvf'),
         address: (aria("button[data-item-id='address']") || '').replace(/^Address:\\s*/, ''),
         phone: (aria("button[data-item-id^='phone']") || '').replace(/^Phone:\\s*/, ''),
         website: web ? web.href : null,
-        rating: rating, review_count: count
+        rating: rating, review_count: count,
+        hours: hours
     };
 }"""
 

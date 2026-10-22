@@ -243,11 +243,57 @@ def _email_priority_score(email: str) -> int:
     return 70  # unknown personal name — could be owner, defaulted high
 
 
-def _best_email(emails: list[str]) -> str | None:
-    """Return highest-scored email from a list, or None if list is empty."""
+def _clean_name(s: str | None) -> str:
+    return re.sub(r"[^a-z]", "", (s or "").lower())
+
+
+def _name_matches_email(first: str | None, last: str | None, email: str) -> bool:
+    """True if the email's local part looks like it belongs to (first, last).
+
+    Checks common personal-email conventions: firstlast, lastfirst,
+    first-initial+last, first+last-initial, or first/last name alone.
+    """
+    f, l = _clean_name(first), _clean_name(last)
+    if not f and not l:
+        return False
+    prefix = re.sub(r"[^a-z]", "", email.split("@")[0].lower())
+    candidates = {f, l}
+    if f and l:
+        candidates |= {f + l, l + f, f[:1] + l, f + l[:1], l + f[:1]}
+    candidates.discard("")
+    return prefix in candidates
+
+
+def _owner_match_score(email: str, known_names: list[tuple] | None) -> int | None:
+    """If email's local part matches one of the known decision-maker names,
+    return a priority score for it; otherwise None.
+
+    Boost sits above generic inboxes (info@/office@ = 75) and below explicit
+    keyword matches like owner@/ceo@ (100) — we've confirmed *whose* mailbox
+    this is, but the address itself carries no self-declared title.
+    """
+    for first, last in known_names or []:
+        if _name_matches_email(first, last, email):
+            return 95
+    return None
+
+
+def _best_email(emails: list[str], known_names: list[tuple] | None = None) -> str | None:
+    """Return highest-scored email from a list, or None if list is empty.
+
+    known_names: [(first, last), ...] of confirmed decision-makers (e.g. the
+    NPI-registered owner, doctors found on the site) — an email whose local
+    part matches one of these gets boosted above generic/unknown addresses.
+    """
     if not emails:
         return None
-    return max(emails, key=_email_priority_score)
+
+    def score(e: str) -> int:
+        base = _email_priority_score(e)
+        boost = _owner_match_score(e, known_names)
+        return max(base, boost) if boost is not None else base
+
+    return max(emails, key=score)
 
 
 def _infer_role(email: str) -> str | None:
@@ -395,9 +441,53 @@ def _owner_name_patterns(first: str, last: str, domain: str) -> list[str]:
     ]
 
 
+# Vendor signature -> substrings to look for (case-insensitive) in raw page
+# HTML (script src, iframe src, or link href). First match wins; order
+# matters only for the log line, not for correctness.
+_BOOKING_SIGNATURES: dict[str, list[str]] = {
+    "Zocdoc":         ["zocdoc.com"],
+    "NexHealth":      ["nexhealth.com"],
+    "Weave":          ["getweave.com", "weavehq.com"],
+    "Solutionreach":  ["solutionreach.com"],
+    "Lighthouse 360": ["lh360.com", "lighthouse360.com"],
+    "Demandforce":    ["demandforce.com"],
+    "RevenueWell":    ["revenuewell.com"],
+    "Doctible":       ["doctible.com"],
+    "Podium":         ["podium.com"],
+    "PatientPop":     ["patientpop.com"],
+    "Yapi":           ["yapiapp.com", "yapi.io"],
+    "SimplePractice": ["simplepractice.com"],
+    "Calendly":       ["calendly.com"],
+    "Ascend (Henry Schein)": ["ascendhs.com", "ascenddental.com"],
+}
+
+# Generic fallback when no known vendor matched but the page clearly offers
+# self-service booking (a CTA linking to a booking/scheduling path).
+_GENERIC_BOOKING_HREF = re.compile(
+    r'href=["\'][^"\']*(?:book-?(?:now|online|appointment)|schedule-?(?:online|appointment)|request-?appointment)[^"\']*["\']',
+    re.I,
+)
+
+
+def _detect_booking_software(html_blobs: list[str]) -> dict:
+    """
+    Scan already-fetched page HTML for a known online-booking vendor's
+    embed/script/iframe, falling back to a generic "book now" link check.
+    No extra HTTP requests — reuses the pages quick_scrape() already pulled.
+    Returns {"has_online_booking": bool, "booking_software": str|None}.
+    """
+    combined = "\n".join(html_blobs)
+    for vendor, needles in _BOOKING_SIGNATURES.items():
+        if any(needle in combined.lower() for needle in needles):
+            return {"has_online_booking": True, "booking_software": vendor}
+    if _GENERIC_BOOKING_HREF.search(combined):
+        return {"has_online_booking": True, "booking_software": None}
+    return {"has_online_booking": False, "booking_software": None}
+
+
 def quick_scrape(website):
     """
-    Step 0: fetch sub-pages, extract emails + doctor names.
+    Step 0: fetch sub-pages, extract emails + doctor names + booking-software signal.
     """
     _section("STEP 0 — HTML Scrape  (fast, no browser)")
     _log(f"    Checking {len(SUBPAGES)} sub-pages on {_base_url(website)}")
@@ -409,6 +499,7 @@ def quick_scrape(website):
     doctors     = []
     doctor_seen = set()
     pages_hit   = 0
+    html_blobs  = []
 
     for sub in SUBPAGES:
         url          = base + sub if sub else website
@@ -420,6 +511,7 @@ def quick_scrape(website):
             continue
 
         pages_hit += 1
+        html_blobs.append(html)
         page_emails  = set(_mailto_emails(html) + _text_emails(html))
         page_doctors = _extract_doctor_names(html)
 
@@ -456,14 +548,22 @@ def quick_scrape(website):
 
     direct_emails = sorted(own) or sorted(other)
     doctors       = doctors[:MAX_DOCTORS]
+    booking       = _detect_booking_software(html_blobs)
 
     _log()
     _log(f"    Step 0 summary:")
     _log(f"      Pages scraped  : {pages_hit}/{len(SUBPAGES)}")
     _log(f"      Direct emails  : {', '.join(direct_emails) if direct_emails else 'none'}")
     _log(f"      Doctors found  : {', '.join('Dr. '+f+' '+l for f,l in doctors) if doctors else 'none'}")
+    _log(f"      Online booking : {booking['booking_software'] or ('generic widget' if booking['has_online_booking'] else 'none detected')}")
 
-    return {"direct_emails": direct_emails, "doctors": doctors, "pages_hit": pages_hit}
+    return {
+        "direct_emails": direct_emails,
+        "doctors": doctors,
+        "pages_hit": pages_hit,
+        "has_online_booking": booking["has_online_booking"],
+        "booking_software": booking["booking_software"],
+    }
 
 
 # ── Steps 1+2: pattern build + SMTP verify ────────────────────────────────────
@@ -617,10 +717,12 @@ def _snov_token(client_id: str, client_secret: str) -> str | None:
     return None
 
 
-def snov_lookup(domain: str) -> dict:
+def snov_lookup(domain: str, known_names: list[tuple] | None = None) -> dict:
     """
     Step 2 — Snov.io domain email search.
     Free plan: 50 credits/month. Requires SNOV_CLIENT_ID + SNOV_CLIENT_SECRET.
+    known_names: confirmed decision-maker (first, last) pairs, used to boost a
+    matching personal-name email above generic inboxes when picking the best one.
     Returns {"email": str|None, "all_emails": list[str], "method": str}.
     method values: "snov_domain" | "snov_not_found" | "snov_skipped" | "snov_error"
     """
@@ -654,7 +756,7 @@ def snov_lookup(domain: str) -> dict:
             ]
             _log(f"    Snov.io returned {len(emails)} email(s)")
             if emails:
-                best = _best_email(emails) or emails[0]
+                best = _best_email(emails, known_names) or emails[0]
                 _log(f"    >> Snov.io found: {best}")
                 return {"email": best, "all_emails": emails, "method": "snov_domain"}
         else:
@@ -670,12 +772,16 @@ def snov_lookup(domain: str) -> dict:
 _SERPAPI_URL = "https://serpapi.com/search.json"
 
 
-def serp_email_search(clinic_name: str, domain: str) -> dict:
+def serp_email_search(
+    clinic_name: str, domain: str, known_names: list[tuple] | None = None
+) -> dict:
     """
     Step 3 — Google SERP email mining via SerpAPI.
     Free plan: 100 searches/month. Requires SERPAPI_KEY.
     Searches Google for emails indexed at the clinic's domain from any web source.
     Only emails matching the clinic's own domain are returned.
+    known_names: confirmed decision-maker (first, last) pairs, used to boost a
+    matching personal-name email above generic inboxes when picking the best one.
     Returns {"email": str|None, "all_emails": list[str], "method": str}.
     method values: "serp" | "serp_not_found" | "serp_skipped"
     """
@@ -722,7 +828,7 @@ def serp_email_search(clinic_name: str, domain: str) -> dict:
 
     if found:
         emails = list(found)
-        best   = _best_email(emails) or emails[0]
+        best   = _best_email(emails, known_names) or emails[0]
         _log(f"    >> SERP found: {best}")
         return {"email": best, "all_emails": emails, "method": "serp"}
 
@@ -920,18 +1026,22 @@ async def find_email_for_clinic(
       4.   Browser agent   — free (Groq), 1-2 min
       5.   Hunter.io       — paid, 1-2s    (last resort)
 
-    Returns: {email, method, all_emails, doctors_found, contact_role, status}
+    Returns: {email, method, all_emails, doctors_found, contact_role,
+              has_online_booking, booking_software, status}
     """
     email, method, all_emails, doctors = None, None, [], []
     npi_owner: dict = {"first_name": None, "last_name": None, "title": None}
+    has_online_booking, booking_software = False, None
 
     # Step 0 — HTML scrape (free, fastest)
     try:
         s = quick_scrape(website)
         doctors    = s["doctors"]
         all_emails = s["direct_emails"]
+        has_online_booking = s.get("has_online_booking", False)
+        booking_software   = s.get("booking_software")
         if s["direct_emails"]:
-            email  = _best_email(s["direct_emails"])
+            email  = _best_email(s["direct_emails"], known_names=doctors)
             method = "html_direct"
     except Exception:
         pass
@@ -970,12 +1080,19 @@ async def find_email_for_clinic(
         except Exception:
             pass
 
+    # Known decision-maker names gathered so far (doctors from Step 0, owner
+    # from Step 0.5) — used to boost a matching personal-name email above
+    # generic inboxes when Steps 2/3 return multiple candidates.
+    known_names = list(doctors)
+    if npi_owner.get("first_name") and npi_owner.get("last_name"):
+        known_names.append((npi_owner["first_name"], npi_owner["last_name"]))
+
     # Step 2 — Snov.io domain search (free 50/month; different DB than Hunter)
     if not email:
         try:
             domain = _domain_from_url(website) or ""
             if domain:
-                sr = snov_lookup(domain)
+                sr = snov_lookup(domain, known_names=known_names)
                 if sr.get("email"):
                     email, method = sr["email"], sr["method"]
                     all_emails    = sr["all_emails"]
@@ -987,7 +1104,7 @@ async def find_email_for_clinic(
         try:
             domain = _domain_from_url(website) or ""
             if domain:
-                gr = serp_email_search(clinic_name, domain)
+                gr = serp_email_search(clinic_name, domain, known_names=known_names)
                 if gr.get("email"):
                     email, method = gr["email"], gr["method"]
                     all_emails    = gr["all_emails"]
@@ -1016,10 +1133,17 @@ async def find_email_for_clinic(
         except Exception:
             pass
 
-    # Infer role from email prefix; fall back to NPI authorized-official title
-    # when the email is a personal name (e.g. jsmith@) with no recognizable prefix.
+    # Infer role from email prefix; fall back to the NPI authorized-official
+    # title only when the chosen email's local part actually name-matches
+    # that owner (not just "any unrecognized prefix"), so we don't mislabel
+    # some other unmatched personal-name address as the owner.
     role = _infer_role(email)
-    if role is None and email and npi_owner.get("title"):
+    if (
+        role is None
+        and email
+        and npi_owner.get("title")
+        and _name_matches_email(npi_owner.get("first_name"), npi_owner.get("last_name"), email)
+    ):
         raw_title = npi_owner["title"].strip()
         role = raw_title.title() if raw_title else None
 
@@ -1029,5 +1153,7 @@ async def find_email_for_clinic(
         "all_emails": all_emails,
         "doctors_found": [f"Dr. {f} {l}" for f, l in doctors],
         "contact_role": role,
+        "has_online_booking": has_online_booking,
+        "booking_software": booking_software,
         "status": "found" if email else "not_found",
     }

@@ -6,6 +6,7 @@ from app.database import get_db
 from app.scraper.stage1_scrape import run_stage1, run_stage1_at_coords
 from app.scraper.stage2_categorize import categorize_clinic
 from app.scraper.stage3_emails import find_email_for_clinic
+from app.scraper.hours_utils import derive_after_hours_gap
 from app.niches.base import NicheConfig
 from app.campaigns.service import on_cell_complete
 
@@ -57,6 +58,7 @@ async def _process_clinics(
     # ── Insert new clinics only ────────────────────────────────────────────
     saved_rows = []
     for c in new_clinics:
+        after_hours = derive_after_hours_gap(c.get("hours"))
         row = {
             "job_id": job_id, "niche_id": niche_config.niche_id,
             "name": c.get("name"), "address": c.get("address"),
@@ -64,6 +66,8 @@ async def _process_clinics(
             "google_maps_url": c.get("google_maps_url"),
             "rating": c.get("rating"), "review_count": c.get("review_count"),
             "reviews_json": c.get("reviews", []),
+            "hours_json": c.get("hours") or {},
+            "after_hours_gap": after_hours["after_hours_gap"],
         }
         result = db.table("clinics").insert(row).execute()
         saved_id = result.data[0]["id"]
@@ -119,6 +123,8 @@ async def _process_clinics(
             "contact_role": result.get("contact_role"),
             "all_emails": result["all_emails"],
             "doctors_found": result["doctors_found"],
+            "has_online_booking": result.get("has_online_booking"),
+            "booking_software": result.get("booking_software"),
             "status": "new",
         }, on_conflict="clinic_id").execute()
 
